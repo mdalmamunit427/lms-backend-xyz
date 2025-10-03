@@ -1,0 +1,284 @@
+// src/modules/coupons/coupon.service.ts
+
+import { AppError } from "../../utils/errorHandler";
+import Coupon from "./coupon.model";
+import Course from "../courses/course.model";
+import { ServiceResponse } from "../../@types/api";
+
+// Validate coupon
+export const validateCoupon = async (code: string, courseId: string): Promise<ServiceResponse<any>> => {
+  try {
+    const coupon = await Coupon.findOne({ 
+      code: code.toUpperCase(), 
+      isActive: true 
+    });
+    
+    if (!coupon) {
+      return {
+        success: false,
+        message: 'Invalid coupon code',
+        errors: ['No active coupon found with the provided code']
+      };
+    }
+    
+    // Check expiration
+    if (coupon.expiresAt && coupon.expiresAt < new Date()) {
+      return {
+        success: false,
+        message: 'Coupon has expired',
+        errors: ['The coupon code has expired']
+      };
+    }
+    
+    // Check usage limit
+    if (coupon.usageLimit && coupon.usageCount >= coupon.usageLimit) {
+      return {
+        success: false,
+        message: 'Coupon usage limit exceeded',
+        errors: ['The coupon has reached its maximum usage limit']
+      };
+    }
+    
+    // Check if applies to course
+    if (coupon.appliesTo !== 'all' && coupon.appliesTo.toString() !== courseId) {
+      return {
+        success: false,
+        message: 'Coupon not valid for this course',
+        errors: ['This coupon is not valid for the selected course']
+      };
+    }
+    
+    return {
+      success: true,
+      data: coupon,
+      message: 'Coupon validated successfully'
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: 'Coupon validation failed',
+      errors: [error.message]
+    };
+  }
+};
+
+// Apply coupon to course
+export const applyCoupon = async (couponId: string, courseId: string): Promise<ServiceResponse<any>> => {
+  try {
+    const coupon = await Coupon.findById(couponId);
+    const course = await Course.findById(courseId);
+    
+    if (!coupon || !course) {
+      return {
+        success: false,
+        message: 'Invalid coupon or course',
+        errors: ['Coupon or course not found']
+      };
+    }
+    
+    let discountAmount = 0;
+    if (coupon.discountValue <= 100) {
+      // Percentage discount
+      discountAmount = (course.price * coupon.discountValue) / 100;
+    } else {
+      // Fixed amount discount
+      discountAmount = coupon.discountValue;
+    }
+    
+    const finalPrice = Math.max(0, course.price - discountAmount);
+    
+    return {
+      success: true,
+      data: {
+        originalPrice: course.price,
+        discountAmount: Math.round(discountAmount),
+        finalPrice: Math.round(finalPrice),
+        coupon: coupon.code,
+        savings: Math.round(course.price - finalPrice)
+      },
+      message: 'Coupon applied successfully'
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: 'Failed to apply coupon',
+      errors: [error.message]
+    };
+  }
+};
+
+// Use coupon (increment usage count)
+export const useCoupon = async (couponId: string): Promise<ServiceResponse<any>> => {
+  try {
+    const coupon = await Coupon.findByIdAndUpdate(
+      couponId,
+      { $inc: { usageCount: 1 } },
+      { new: true }
+    );
+
+    if (!coupon) {
+      return {
+        success: false,
+        message: 'Coupon not found',
+        errors: ['No coupon found with the provided ID']
+      };
+    }
+
+    return {
+      success: true,
+      data: coupon,
+      message: 'Coupon usage count updated successfully'
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: 'Failed to update coupon usage',
+      errors: [error.message]
+    };
+  }
+};
+
+// Create coupon
+export const createCoupon = async (couponData: any): Promise<ServiceResponse<any>> => {
+  try {
+    const coupon = new Coupon(couponData);
+    await coupon.save();
+    
+    return {
+      success: true,
+      data: coupon,
+      message: 'Coupon created successfully'
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: 'Coupon creation failed',
+      errors: [error.message]
+    };
+  }
+};
+
+// Get all coupons
+export const getAllCoupons = async (): Promise<ServiceResponse<any>> => {
+  try {
+    const coupons = await Coupon.find().sort({ createdAt: -1 });
+    
+    return {
+      success: true,
+      data: coupons,
+      message: 'Coupons retrieved successfully'
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: 'Failed to retrieve coupons',
+      errors: [error.message]
+    };
+  }
+};
+
+// Get coupon by ID
+export const getCouponById = async (couponId: string): Promise<ServiceResponse<any>> => {
+  try {
+    const coupon = await Coupon.findById(couponId);
+    
+    if (!coupon) {
+      return {
+        success: false,
+        message: 'Coupon not found',
+        errors: ['No coupon found with the provided ID']
+      };
+    }
+    
+    return {
+      success: true,
+      data: coupon,
+      message: 'Coupon retrieved successfully'
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: 'Failed to retrieve coupon',
+      errors: [error.message]
+    };
+  }
+};
+
+// Update coupon
+export const updateCoupon = async (couponId: string, updateData: any): Promise<ServiceResponse<any>> => {
+  try {
+    const coupon = await Coupon.findByIdAndUpdate(couponId, updateData, { new: true });
+    
+    if (!coupon) {
+      return {
+        success: false,
+        message: 'Coupon not found',
+        errors: ['No coupon found with the provided ID']
+      };
+    }
+    
+    return {
+      success: true,
+      data: coupon,
+      message: 'Coupon updated successfully'
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: 'Coupon update failed',
+      errors: [error.message]
+    };
+  }
+};
+
+// Delete coupon
+export const deleteCoupon = async (couponId: string): Promise<ServiceResponse<any>> => {
+  try {
+    const coupon = await Coupon.findByIdAndDelete(couponId);
+    
+    if (!coupon) {
+      return {
+        success: false,
+        message: 'Coupon not found',
+        errors: ['No coupon found with the provided ID']
+      };
+    }
+    
+    return {
+      success: true,
+      data: coupon,
+      message: 'Coupon deleted successfully'
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: 'Coupon deletion failed',
+      errors: [error.message]
+    };
+  }
+};
+
+// Get active coupons
+export const getActiveCoupons = async (): Promise<ServiceResponse<any>> => {
+  try {
+    const coupons = await Coupon.find({ 
+      isActive: true,
+      $or: [
+        { expiresAt: { $exists: false } },
+        { expiresAt: { $gt: new Date() } }
+      ]
+    }).sort({ createdAt: -1 });
+    
+    return {
+      success: true,
+      data: coupons,
+      message: 'Active coupons retrieved successfully'
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: 'Failed to retrieve active coupons',
+      errors: [error.message]
+    };
+  }
+};
