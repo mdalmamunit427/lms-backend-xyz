@@ -53,10 +53,12 @@ export const createChapter = async (data: ICreateChapterData, userId: string, us
           session
         );
         
-        // Invalidate relevant caches
-        await invalidateCache(`course:id=${data.course}`);
-        await invalidateCache(`${CHAPTER_CACHE_BASE}:courseId=${data.course}`);
-        await invalidateCache("courses:list");
+        // Invalidate relevant caches (batch, non-blocking)
+        Promise.all([
+          invalidateCache(`course:id=${data.course}`),
+          invalidateCache(`${CHAPTER_CACHE_BASE}:courseId=${data.course}`),
+          invalidateCache("courses:list"),
+        ]).catch(err => console.error('Cache invalidation failed (non-blocking):', err?.message || err));
         
         return chapter;
       } else {
@@ -64,9 +66,11 @@ export const createChapter = async (data: ICreateChapterData, userId: string, us
         order = (await Chapter.countDocuments({ course: data.course }).session(session)) + 1;
         const [chapter] = await Chapter.create([{ ...data, order }], { session, ordered: true});
 
-        // Invalidate relevant caches
-        await invalidateCache(`course:id=${data.course}`);
-        await invalidateCache("courses:list");
+        // Invalidate relevant caches (batch, non-blocking)
+        Promise.all([
+          invalidateCache(`course:id=${data.course}`),
+          invalidateCache("courses:list"),
+        ]).catch(err => console.error('Cache invalidation failed (non-blocking):', err?.message || err));
 
         return chapter;
       }

@@ -72,11 +72,12 @@ export const processEnrollment = async ({
       const course = await Course.findById(courseId);
 
       if (student && course) {
-        await sendEmail(student.email, "Enrollment Confirmed - CodeTutor LMS", "enrollment", {
+        // Fire-and-forget email to avoid blocking the request
+        sendEmail(student.email, "Enrollment Confirmed - CodeTutor LMS", "enrollment", {
           studentName: student.name,
           courseTitle: course.title,
           dashboardUrl: process.env.FRONTEND_URL + "/dashboard",
-        });
+        }).catch((err) => console.error("Email send failed (non-blocking):", err?.message || err));
       }
 
       return newEnrollment[0];

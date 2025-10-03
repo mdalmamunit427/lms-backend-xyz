@@ -104,11 +104,13 @@ export const answerQuestionService = async (
                 );
             }
             
-            // Invalidate caches (matching the cache key patterns from routes)
-            await invalidateCache(`${DISCUSSION_CACHE_BASE}:id=${discussionId}`);
-            await invalidateCache(`${DISCUSSION_CACHE_BASE}:lectureId:lectureId=${discussion.lecture}`);
-            await invalidateCache(`${DISCUSSION_CACHE_BASE}:courseId:courseId=${discussion.course}`);
-            await invalidateCache(`${DISCUSSION_CACHE_BASE}:user:user=${discussion.user}`);
+            // Invalidate caches (batch, non-blocking)
+            Promise.all([
+                invalidateCache(`${DISCUSSION_CACHE_BASE}:id=${discussionId}`),
+                invalidateCache(`${DISCUSSION_CACHE_BASE}:lectureId:lectureId=${discussion.lecture}`),
+                invalidateCache(`${DISCUSSION_CACHE_BASE}:courseId:courseId=${discussion.course}`),
+                invalidateCache(`${DISCUSSION_CACHE_BASE}:user:user=${discussion.user}`),
+            ]).catch(err => console.error('Cache invalidation failed (non-blocking):', err?.message || err));
             
             return discussion.populate([
                 { path: 'user', select: 'name avatar' },

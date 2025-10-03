@@ -51,11 +51,12 @@ const processEnrollment = async ({ studentId, courseId, amountPaid, paymentStatu
             const student = await user_model_1.default.findById(studentId);
             const course = await course_model_1.default.findById(courseId);
             if (student && course) {
-                await (0, email_1.sendEmail)(student.email, "Enrollment Confirmed - CodeTutor LMS", "enrollment", {
+                // Fire-and-forget email to avoid blocking the request
+                (0, email_1.sendEmail)(student.email, "Enrollment Confirmed - CodeTutor LMS", "enrollment", {
                     studentName: student.name,
                     courseTitle: course.title,
                     dashboardUrl: process.env.FRONTEND_URL + "/dashboard",
-                });
+                }).catch((err) => console.error("Email send failed (non-blocking):", err?.message || err));
             }
             return newEnrollment[0];
         });

@@ -80,11 +80,13 @@ export const createLectureService = async (data: ICreateLectureBody, userId: str
             });
             await chapter.save({ session });
             
-            // 6. Invalidate relevant caches
-            await invalidateCache(`${LECTURE_CACHE_BASE}:${lecture._id}`);
-            await invalidateCache(`${LECTURE_CACHE_BASE}:chapterId=${chapter._id}*`);
-            await invalidateCache(`chapter:${chapter._id}`);
-            await invalidateCache(`course:id=${data.course}`);
+            // 6. Invalidate relevant caches (batch fire-and-forget)
+            Promise.all([
+                invalidateCache(`${LECTURE_CACHE_BASE}:${lecture._id}`),
+                invalidateCache(`${LECTURE_CACHE_BASE}:chapterId=${chapter._id}*`),
+                invalidateCache(`chapter:${chapter._id}`),
+                invalidateCache(`course:id=${data.course}`),
+            ]).catch(err => console.error('Cache invalidation failed (non-blocking):', err?.message || err));
 
             return lecture;
         });
@@ -205,11 +207,13 @@ export const updateLectureService = async (id: string, data: IUpdateLectureBody,
             
             await lecture.save({ session });
             
-            // 3. Invalidate caches
-            await invalidateCache(`${LECTURE_CACHE_BASE}:${lecture._id}`);
-            await invalidateCache(`${LECTURE_CACHE_BASE}:chapterId=${lecture.chapter}*`);
-            await invalidateCache(`chapter:${lecture.chapter}`);
-            await invalidateCache(`course:id=${lecture.course}`);
+            // 3. Invalidate caches (batch fire-and-forget)
+            Promise.all([
+                invalidateCache(`${LECTURE_CACHE_BASE}:${lecture._id}`),
+                invalidateCache(`${LECTURE_CACHE_BASE}:chapterId=${lecture.chapter}*`),
+                invalidateCache(`chapter:${lecture.chapter}`),
+                invalidateCache(`course:id=${lecture.course}`),
+            ]).catch(err => console.error('Cache invalidation failed (non-blocking):', err?.message || err));
             
             return lecture;
         });

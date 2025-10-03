@@ -160,11 +160,13 @@ export const updateQuizService = async (id: string, data: IUpdateQuizBody, userI
               );
             }
 
-            // 4. Invalidate caches
-            await invalidateCache(`${QUIZ_CACHE_BASE}:${quiz._id}`);
-            await invalidateCache(`${QUIZ_CACHE_BASE}:chapterId=${quiz.chapter}`);
-            await invalidateCache(`${QUIZ_CACHE_BASE}:courseId=${quiz.course}`);
-            await invalidateCache(`chapter:${quiz.chapter}`);
+            // 4. Invalidate caches (batch, non-blocking)
+            Promise.all([
+              invalidateCache(`${QUIZ_CACHE_BASE}:${quiz._id}`),
+              invalidateCache(`${QUIZ_CACHE_BASE}:chapterId=${quiz.chapter}`),
+              invalidateCache(`${QUIZ_CACHE_BASE}:courseId=${quiz.course}`),
+              invalidateCache(`chapter:${quiz.chapter}`),
+            ]).catch(err => console.error('Cache invalidation failed (non-blocking):', err?.message || err));
             await invalidateCache(`course:id=${quiz.course}`);
 
             return quiz;

@@ -78,11 +78,13 @@ const answerQuestionService = async (discussionId, userId, text, isInstructor = 
             if (discussion.user.toString() !== userId) {
                 await (0, notification_service_1.createNotification)(discussion.user.toString(), 'question_answered', `Your question has been answered`, discussionId);
             }
-            // Invalidate caches (matching the cache key patterns from routes)
-            await (0, cache_1.invalidateCache)(`${DISCUSSION_CACHE_BASE}:id=${discussionId}`);
-            await (0, cache_1.invalidateCache)(`${DISCUSSION_CACHE_BASE}:lectureId:lectureId=${discussion.lecture}`);
-            await (0, cache_1.invalidateCache)(`${DISCUSSION_CACHE_BASE}:courseId:courseId=${discussion.course}`);
-            await (0, cache_1.invalidateCache)(`${DISCUSSION_CACHE_BASE}:user:user=${discussion.user}`);
+            // Invalidate caches (batch, non-blocking)
+            Promise.all([
+                (0, cache_1.invalidateCache)(`${DISCUSSION_CACHE_BASE}:id=${discussionId}`),
+                (0, cache_1.invalidateCache)(`${DISCUSSION_CACHE_BASE}:lectureId:lectureId=${discussion.lecture}`),
+                (0, cache_1.invalidateCache)(`${DISCUSSION_CACHE_BASE}:courseId:courseId=${discussion.course}`),
+                (0, cache_1.invalidateCache)(`${DISCUSSION_CACHE_BASE}:user:user=${discussion.user}`),
+            ]).catch(err => console.error('Cache invalidation failed (non-blocking):', err?.message || err));
             return discussion.populate([
                 { path: 'user', select: 'name avatar' },
                 { path: 'answers.user', select: 'name avatar' }

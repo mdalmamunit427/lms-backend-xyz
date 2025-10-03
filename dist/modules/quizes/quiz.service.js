@@ -131,11 +131,13 @@ const updateQuizService = async (id, data, userId, userRole) => {
             if (data.title) {
                 await chapter_model_1.default.updateOne({ "content.refId": quiz._id }, { $set: { "content.$.title": data.title } }, { session });
             }
-            // 4. Invalidate caches
-            await (0, cache_1.invalidateCache)(`${QUIZ_CACHE_BASE}:${quiz._id}`);
-            await (0, cache_1.invalidateCache)(`${QUIZ_CACHE_BASE}:chapterId=${quiz.chapter}`);
-            await (0, cache_1.invalidateCache)(`${QUIZ_CACHE_BASE}:courseId=${quiz.course}`);
-            await (0, cache_1.invalidateCache)(`chapter:${quiz.chapter}`);
+            // 4. Invalidate caches (batch, non-blocking)
+            Promise.all([
+                (0, cache_1.invalidateCache)(`${QUIZ_CACHE_BASE}:${quiz._id}`),
+                (0, cache_1.invalidateCache)(`${QUIZ_CACHE_BASE}:chapterId=${quiz.chapter}`),
+                (0, cache_1.invalidateCache)(`${QUIZ_CACHE_BASE}:courseId=${quiz.course}`),
+                (0, cache_1.invalidateCache)(`chapter:${quiz.chapter}`),
+            ]).catch(err => console.error('Cache invalidation failed (non-blocking):', err?.message || err));
             await (0, cache_1.invalidateCache)(`course:id=${quiz.course}`);
             return quiz;
         });

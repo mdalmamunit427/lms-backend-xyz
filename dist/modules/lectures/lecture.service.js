@@ -59,11 +59,13 @@ const createLectureService = async (data, userId, userRole) => {
                 isPreview: lecture.isPreview || false
             });
             await chapter.save({ session });
-            // 6. Invalidate relevant caches
-            await (0, cache_1.invalidateCache)(`${LECTURE_CACHE_BASE}:${lecture._id}`);
-            await (0, cache_1.invalidateCache)(`${LECTURE_CACHE_BASE}:chapterId=${chapter._id}*`);
-            await (0, cache_1.invalidateCache)(`chapter:${chapter._id}`);
-            await (0, cache_1.invalidateCache)(`course:id=${data.course}`);
+            // 6. Invalidate relevant caches (batch fire-and-forget)
+            Promise.all([
+                (0, cache_1.invalidateCache)(`${LECTURE_CACHE_BASE}:${lecture._id}`),
+                (0, cache_1.invalidateCache)(`${LECTURE_CACHE_BASE}:chapterId=${chapter._id}*`),
+                (0, cache_1.invalidateCache)(`chapter:${chapter._id}`),
+                (0, cache_1.invalidateCache)(`course:id=${data.course}`),
+            ]).catch(err => console.error('Cache invalidation failed (non-blocking):', err?.message || err));
             return lecture;
         });
         return {
@@ -170,11 +172,13 @@ const updateLectureService = async (id, data, userId, userRole) => {
                 Object.assign(lecture, data);
             }
             await lecture.save({ session });
-            // 3. Invalidate caches
-            await (0, cache_1.invalidateCache)(`${LECTURE_CACHE_BASE}:${lecture._id}`);
-            await (0, cache_1.invalidateCache)(`${LECTURE_CACHE_BASE}:chapterId=${lecture.chapter}*`);
-            await (0, cache_1.invalidateCache)(`chapter:${lecture.chapter}`);
-            await (0, cache_1.invalidateCache)(`course:id=${lecture.course}`);
+            // 3. Invalidate caches (batch fire-and-forget)
+            Promise.all([
+                (0, cache_1.invalidateCache)(`${LECTURE_CACHE_BASE}:${lecture._id}`),
+                (0, cache_1.invalidateCache)(`${LECTURE_CACHE_BASE}:chapterId=${lecture.chapter}*`),
+                (0, cache_1.invalidateCache)(`chapter:${lecture.chapter}`),
+                (0, cache_1.invalidateCache)(`course:id=${lecture.course}`),
+            ]).catch(err => console.error('Cache invalidation failed (non-blocking):', err?.message || err));
             return lecture;
         });
         return {

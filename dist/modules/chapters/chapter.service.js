@@ -31,19 +31,23 @@ const createChapter = async (data, userId, userRole) => {
                 const chapter = createdChapters[0];
                 // Apply smart reorder logic to place the chapter at the desired position
                 await (0, chapterReorder_1.reorderCourseChaptersWithConflictResolution)(data.course, [{ chapterId: chapter._id.toString(), order: data.order }], session);
-                // Invalidate relevant caches
-                await (0, cache_1.invalidateCache)(`course:id=${data.course}`);
-                await (0, cache_1.invalidateCache)(`${CHAPTER_CACHE_BASE}:courseId=${data.course}`);
-                await (0, cache_1.invalidateCache)("courses:list");
+                // Invalidate relevant caches (batch, non-blocking)
+                Promise.all([
+                    (0, cache_1.invalidateCache)(`course:id=${data.course}`),
+                    (0, cache_1.invalidateCache)(`${CHAPTER_CACHE_BASE}:courseId=${data.course}`),
+                    (0, cache_1.invalidateCache)("courses:list"),
+                ]).catch(err => console.error('Cache invalidation failed (non-blocking):', err?.message || err));
                 return chapter;
             }
             else {
                 // Auto-calculate order (existing behavior)
                 order = (await chapter_model_1.default.countDocuments({ course: data.course }).session(session)) + 1;
                 const [chapter] = await chapter_model_1.default.create([{ ...data, order }], { session, ordered: true });
-                // Invalidate relevant caches
-                await (0, cache_1.invalidateCache)(`course:id=${data.course}`);
-                await (0, cache_1.invalidateCache)("courses:list");
+                // Invalidate relevant caches (batch, non-blocking)
+                Promise.all([
+                    (0, cache_1.invalidateCache)(`course:id=${data.course}`),
+                    (0, cache_1.invalidateCache)("courses:list"),
+                ]).catch(err => console.error('Cache invalidation failed (non-blocking):', err?.message || err));
                 return chapter;
             }
         });
