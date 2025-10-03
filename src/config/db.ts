@@ -2,10 +2,38 @@
 
 import mongoose from 'mongoose';
 
+// In serverless (Vercel), cache the connection across invocations
+declare global {
+    // eslint-disable-next-line no-var
+    var __mongooseConn: Promise<typeof mongoose> | undefined;
+}
+
+const connectWithOptions = async () => {
+    const uri = process.env.MONGODB_URL!;
+    // Extend buffer timeout beyond default 10s to accommodate serverless cold starts
+    mongoose.set('bufferTimeoutMS', 30000);
+    // Add robust timeouts and IPv4 preference to avoid DNS/IPv6 issues in serverless
+    return mongoose.connect(uri, {
+        serverSelectionTimeoutMS: 30000,
+        connectTimeoutMS: 30000,
+        socketTimeoutMS: 60000,
+        family: 4,
+        // Keep default buffering; alternatively, disable to fail fast:
+        // bufferCommands: false,
+    });
+};
+
 const connectDB = async () => {
     try {
-        // Mongoose connects and maintains connection pool
-        await mongoose.connect(process.env.MONGODB_URL!);
+        if (!process.env.MONGODB_URL) {
+            throw new Error('MONGODB_URL is not set');
+        }
+
+        if (!global.__mongooseConn) {
+            global.__mongooseConn = connectWithOptions();
+        }
+
+        await global.__mongooseConn;
         console.log('✅ MongoDB connected');
 
         // CRITICAL: Listeners for post-connection stability
@@ -20,9 +48,9 @@ const connectDB = async () => {
         });
 
     } catch (err) {
-        console.error('❌ MongoDB initial connection error: Could not connect to Atlas.', err);
-        // Exit process if the initial connection fails (fail-fast principle)
-        process.exit(1);
+        console.error('❌ MongoDB initial connection error:', err);
+        // In serverless, do not exit the process; rethrow so the platform can retry
+        throw err;
     }
 };
 

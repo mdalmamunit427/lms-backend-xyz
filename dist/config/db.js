@@ -5,10 +5,29 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importDefault(require("mongoose"));
+const connectWithOptions = async () => {
+    const uri = process.env.MONGODB_URL;
+    // Extend buffer timeout beyond default 10s to accommodate serverless cold starts
+    mongoose_1.default.set('bufferTimeoutMS', 30000);
+    // Add robust timeouts and IPv4 preference to avoid DNS/IPv6 issues in serverless
+    return mongoose_1.default.connect(uri, {
+        serverSelectionTimeoutMS: 30000,
+        connectTimeoutMS: 30000,
+        socketTimeoutMS: 60000,
+        family: 4,
+        // Keep default buffering; alternatively, disable to fail fast:
+        // bufferCommands: false,
+    });
+};
 const connectDB = async () => {
     try {
-        // Mongoose connects and maintains connection pool
-        await mongoose_1.default.connect(process.env.MONGODB_URL);
+        if (!process.env.MONGODB_URL) {
+            throw new Error('MONGODB_URL is not set');
+        }
+        if (!global.__mongooseConn) {
+            global.__mongooseConn = connectWithOptions();
+        }
+        await global.__mongooseConn;
         console.log('✅ MongoDB connected');
         // CRITICAL: Listeners for post-connection stability
         mongoose_1.default.connection.on('error', err => {
@@ -21,9 +40,9 @@ const connectDB = async () => {
         });
     }
     catch (err) {
-        console.error('❌ MongoDB initial connection error: Could not connect to Atlas.', err);
-        // Exit process if the initial connection fails (fail-fast principle)
-        process.exit(1);
+        console.error('❌ MongoDB initial connection error:', err);
+        // In serverless, do not exit the process; rethrow so the platform can retry
+        throw err;
     }
 };
 exports.default = connectDB;
