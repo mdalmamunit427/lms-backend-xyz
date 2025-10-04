@@ -273,37 +273,17 @@ const deleteChapterService = async (chapterId, userId, userRole) => {
 };
 exports.deleteChapterService = deleteChapterService;
 /**
- * Reorder Chapters with Lectures - OPTIMIZED VERSION
- * Reduces database calls by optimizing existing operations
+ * Reorder Chapters with Lectures - ULTRA OPTIMIZED VERSION
+ * Reduces database calls from N+2 to just 3 calls total
  */
 const reorderChaptersWithLectures = async (courseId, orderList, userId, userRole) => {
     try {
         await (0, withTransaction_1.withTransaction)(async (session) => {
             // 1. SECURITY: Enforce ownership (single call)
             await (0, ownership_1.validateCourseAndOwnership)(courseId, userId, userRole);
-            // 2. OPTIMIZATION: Batch chapter reordering operations
-            const chapterReorderRequests = orderList.map(item => ({
-                chapterId: item.chapterId,
-                order: item.order
-            }));
-            // Apply smart reorder logic for chapters (handles conflicts automatically)
-            await (0, chapterReorder_1.reorderCourseChaptersWithConflictResolution)(courseId, chapterReorderRequests, session);
-            // 3. OPTIMIZATION: Batch lecture reordering operations for all chapters
-            const lectureReorderPromises = orderList
-                .filter(chapterOrder => chapterOrder.lectures && chapterOrder.lectures.length > 0)
-                .map(chapterOrder => {
-                const reorderRequests = chapterOrder.lectures.map(item => ({
-                    itemId: item.lectureId,
-                    itemType: 'lecture',
-                    order: item.order
-                }));
-                return (0, chapterReorder_1.reorderChapterItemsWithConflictResolution)(chapterOrder.chapterId, reorderRequests, session);
-            });
-            // Execute all lecture reordering operations in parallel
-            if (lectureReorderPromises.length > 0) {
-                await Promise.all(lectureReorderPromises);
-            }
-            // 4. OPTIMIZATION: Batch cache invalidation operations
+            // 2. ULTRA OPTIMIZATION: Single bulk reorder operation for all chapters and lectures
+            await (0, chapterReorder_1.reorderChaptersAndLecturesBulkOptimized)(courseId, orderList, session);
+            // 3. OPTIMIZATION: Batch cache invalidation operations
             const cacheKeys = [
                 `course:id=${courseId}`,
                 `${CHAPTER_CACHE_BASE}:courseId=${courseId}`,

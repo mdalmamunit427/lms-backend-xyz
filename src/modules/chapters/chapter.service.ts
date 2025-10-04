@@ -9,7 +9,7 @@ import { invalidateCache, invalidateCacheAsync, setCache } from "../../utils/cac
 import { validateCourseAndOwnership } from "../../utils/ownership";
 import { updateCourseDuration } from "../courses/course.service";
 import { ServiceResponse } from "../../@types/api";
-import { reorderChapterItemsWithConflictResolution, reorderCourseChaptersWithConflictResolution } from "../../utils/chapterReorder";
+import { reorderChapterItemsWithConflictResolution, reorderCourseChaptersWithConflictResolution, reorderChaptersAndLecturesBulkOptimized } from "../../utils/chapterReorder";
 
 
 // --- Type Definitions for Service Logic ---
@@ -334,8 +334,8 @@ export const deleteChapterService = async (chapterId: string, userId: string, us
     }
 };
 /**
- * Reorder Chapters with Lectures - OPTIMIZED VERSION
- * Reduces database calls by optimizing existing operations
+ * Reorder Chapters with Lectures - ULTRA OPTIMIZED VERSION
+ * Reduces database calls from N+2 to just 3 calls total
  */
 export const reorderChaptersWithLectures = async (
     courseId: string, 
@@ -348,42 +348,14 @@ export const reorderChaptersWithLectures = async (
             // 1. SECURITY: Enforce ownership (single call)
             await validateCourseAndOwnership(courseId, userId, userRole);
 
-            // 2. OPTIMIZATION: Batch chapter reordering operations
-            const chapterReorderRequests = orderList.map(item => ({
-                chapterId: item.chapterId,
-                order: item.order
-            }));
-
-            // Apply smart reorder logic for chapters (handles conflicts automatically)
-            await reorderCourseChaptersWithConflictResolution(
+            // 2. ULTRA OPTIMIZATION: Single bulk reorder operation for all chapters and lectures
+            await reorderChaptersAndLecturesBulkOptimized(
                 courseId,
-                chapterReorderRequests,
+                orderList,
                 session
             );
-
-            // 3. OPTIMIZATION: Batch lecture reordering operations for all chapters
-            const lectureReorderPromises = orderList
-                .filter(chapterOrder => chapterOrder.lectures && chapterOrder.lectures.length > 0)
-                .map(chapterOrder => {
-                    const reorderRequests = chapterOrder.lectures!.map(item => ({
-                        itemId: item.lectureId,
-                        itemType: 'lecture' as const,
-                        order: item.order
-                    }));
-
-                    return reorderChapterItemsWithConflictResolution(
-                        chapterOrder.chapterId,
-                        reorderRequests,
-                        session
-                    );
-                });
-
-            // Execute all lecture reordering operations in parallel
-            if (lectureReorderPromises.length > 0) {
-                await Promise.all(lectureReorderPromises);
-            }
             
-            // 4. OPTIMIZATION: Batch cache invalidation operations
+            // 3. OPTIMIZATION: Batch cache invalidation operations
             const cacheKeys = [
                 `course:id=${courseId}`,
                 `${CHAPTER_CACHE_BASE}:courseId=${courseId}`,

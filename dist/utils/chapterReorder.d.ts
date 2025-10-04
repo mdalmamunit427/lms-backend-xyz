@@ -59,6 +59,22 @@ export declare const reorderCourseChaptersWithConflictResolution: (courseId: str
     order: number;
 }[], session: any) => Promise<ReorderResult[]>;
 /**
+ * ULTRA OPTIMIZED: Single bulk reorder operation for chapters and lectures
+ * Reduces database calls from N+2 to just 3 calls total
+ *
+ * @param courseId - The course ID containing the chapters
+ * @param orderList - Array of chapters with their lectures to reorder
+ * @param session - MongoDB session for transaction support
+ */
+export declare const reorderChaptersAndLecturesBulkOptimized: (courseId: string, orderList: {
+    chapterId: string;
+    order: number;
+    lectures?: {
+        lectureId: string;
+        order: number;
+    }[];
+}[], session: any) => Promise<void>;
+/**
  * Validates that a chapter exists and belongs to the specified course
  *
  * @param chapterId - The chapter ID to validate
