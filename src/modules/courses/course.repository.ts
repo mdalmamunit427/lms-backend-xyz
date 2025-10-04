@@ -175,6 +175,20 @@ export const aggregateCourseDetailsWithEnrollment = (
             },
           },
 
+          // Calculate chapter duration from lectures
+          {
+            $addFields: {
+              chapterDuration: {
+                $sum: {
+                  $map: {
+                    input: "$lectures",
+                    as: "lec",
+                    in: "$$lec.duration"
+                  }
+                }
+              }
+            }
+          },
           { $project: { lectures: 0, quizzes: 0, content: 0 } },
         ],
       },
@@ -205,6 +219,15 @@ export const aggregateCourseDetailsWithEnrollment = (
         enrollmentCount: { $size: "$enrollments" },
         reviewCount: { $size: "$reviews" },
         averageRating: { $avg: "$reviews.rating" },
+        totalDuration: {
+          $sum: {
+            $map: {
+              input: "$chapters",
+              as: "chapter",
+              in: "$$chapter.chapterDuration"
+            }
+          }
+        },
       },
     },
 

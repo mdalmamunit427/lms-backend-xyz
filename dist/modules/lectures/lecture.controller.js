@@ -108,6 +108,6 @@ exports.reorderLecturesHandler = (0, catchAsync_1.catchAsync)(async (req, res) =
     if (!result.success) {
         return (0, response_1.sendError)(res, result.message || 'Lecture reordering failed', 400, result.errors);
     }
-    return (0, response_1.sendSuccess)(res, undefined, 'Lectures reordered successfully');
+    return (0, response_1.sendSuccess)(res, result.data, 'Lectures reordered successfully');
 });
 //# sourceMappingURL=lecture.controller.js.map

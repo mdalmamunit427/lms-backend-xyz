@@ -1,6 +1,10 @@
+import { Router } from "express";
+import { isAuthenticated } from "../../middlewares/auth";
+import { rbac } from "../../middlewares/rbac.middleware";
+import { validate } from "../../middlewares/validate.middleware";
+import { cacheMiddleware } from "../../middlewares/cacheMiddleware";
 // src/modules/progress/progress.routes.ts
 
-import { Router } from "express";
 import {
   updateLectureProgressHandler,
   getCourseProgressHandler,
@@ -12,10 +16,6 @@ import {
   getCourseProgressSchema,
   getCourseCompletionStatsSchema,
 } from "./progress.validation";
-import { getCacheStack, getMutationStack } from "../../utils/middlewareStacks";
-import { isAuthenticated } from "../../middlewares/auth";
-import { cacheMiddleware } from "../../middlewares/cacheMiddleware";
-import { requireEnrollmentForLectureParam } from "../../middlewares/enrollment.middleware";
 
 const router = Router();
 const PROGRESS_CACHE_BASE = 'progress';
@@ -25,11 +25,11 @@ const PROGRESS_CACHE_BASE = 'progress';
 // POST update lecture progress
 router.post(
   "/lecture/:lectureId", 
-  ...getMutationStack('progress:update', updateLectureProgressSchema), 
-  requireEnrollmentForLectureParam,
+  isAuthenticated,
+  rbac('progress:update'),
+  validate(updateLectureProgressSchema), 
   updateLectureProgressHandler
 );
-
 
 // --- READ ROUTES ---
 
@@ -37,21 +37,24 @@ router.post(
 router.get(
     "/dashboard", 
     isAuthenticated,
-    cacheMiddleware(`${PROGRESS_CACHE_BASE}:dashboard`),
     getUserDashboardHandler
 );
 
 // GET course progress for specific course
 router.get(
     "/course/:courseId", 
-    ...getCacheStack(`${PROGRESS_CACHE_BASE}:courseId`, { param: 'courseId' }, getCourseProgressSchema),
+    isAuthenticated,
+    cacheMiddleware(`${PROGRESS_CACHE_BASE}:courseId`, { param: 'courseId' }),
+    validate(getCourseProgressSchema),
     getCourseProgressHandler
 );
 
 // GET course completion statistics (instructor/admin only)
 router.get(
     "/stats/course/:courseId", 
-    ...getCacheStack(`progress-stats:courseId`, { param: 'courseId' }, getCourseCompletionStatsSchema),
+    isAuthenticated,
+    cacheMiddleware(`progress-stats:courseId`, { param: 'courseId' }),
+    validate(getCourseCompletionStatsSchema),
     getCourseCompletionStatsHandler
 );
 

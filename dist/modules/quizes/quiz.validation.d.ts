@@ -39,16 +39,6 @@ export declare const quizIdSchema: z.ZodObject<{
         id: z.ZodString;
     }, z.core.$strip>;
 }, z.core.$strip>;
-export declare const getChapterQuizzesSchema: z.ZodObject<{
-    params: z.ZodObject<{
-        chapterId: z.ZodString;
-    }, z.core.$strip>;
-}, z.core.$strip>;
-export declare const getCourseQuizzesSchema: z.ZodObject<{
-    params: z.ZodObject<{
-        courseId: z.ZodString;
-    }, z.core.$strip>;
-}, z.core.$strip>;
 export declare const submitQuizAttemptSchema: z.ZodObject<{
     body: z.ZodObject<{
         answers: z.ZodArray<z.ZodNumber>;

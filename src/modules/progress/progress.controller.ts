@@ -9,6 +9,7 @@ import { catchAsync } from "../../middlewares/catchAsync";
 import { getUserId, getUserRole } from "../../utils/common";
 import { sendSuccess, sendError } from "../../utils/response";
 import { AuthRequest } from "../../middlewares/auth";
+import { getCacheWithTTL, setCache } from "../../utils/cache";
 
 // --- Type Definitions ---
 interface ProgressAuthRequest extends AuthRequest {
@@ -62,12 +63,25 @@ export const getCourseProgressHandler = async (req: ProgressAuthRequest, res: Re
 
 export const getUserDashboardHandler = catchAsync(async (req: ProgressAuthRequest, res: Response) => {
     const userId = getUserId(req);
+    
+    // Generate user-specific cache key
+    const cacheKey = `progress:dashboard:userId=${userId}`;
+    
+    // Try to get from cache first
+    const cachedData = await getCacheWithTTL(cacheKey);
+    
+    if (cachedData && cachedData.data) {
+        return sendSuccess(res, cachedData.data, 'Dashboard retrieved from cache');
+    }
 
     const result = await progressService.getUserDashboard(userId);
     
     if (!result.success) {
         return sendError(res, result.message || 'Failed to retrieve dashboard', 500, result.errors);
     }
+    
+    // Cache the result for 5 minutes
+    await setCache(cacheKey, result.data, 300);
     
     return sendSuccess(res, result.data, 'Dashboard retrieved successfully');
 });

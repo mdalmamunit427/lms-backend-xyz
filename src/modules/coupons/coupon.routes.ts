@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { permissions } from '../../config/rbac';
 import { validate } from '../../middlewares/validate.middleware';
 import { cacheMiddleware } from '../../middlewares/cacheMiddleware';
-import { getMutationStack, getDeleteStack } from '../../utils/middlewareStacks';
 import { isAuthenticated } from '../../middlewares/auth';
 import { rbac } from '../../middlewares/rbac.middleware';
 import { createCouponSchema, deleteCouponSchema, updateCouponSchema, validateCouponSchema } from './coupon.validation';
@@ -20,7 +19,9 @@ router.post('/validate/:id', validate(validateCouponSchema), validateCouponContr
 // Create a new coupon (Admin only)
 router.post(
   '/',
-  ...getMutationStack(permissions.coupon.create, createCouponSchema),
+  isAuthenticated,
+  rbac(permissions.coupon.create),
+  validate(createCouponSchema),
   createCouponController
 );
 
@@ -36,14 +37,18 @@ router.get(
 // Update a coupon (Admin only)
 router.put(
   '/:id',
-  ...getMutationStack(permissions.coupon.update, updateCouponSchema, deleteCouponSchema),
+  isAuthenticated,
+  rbac(permissions.coupon.update),
+  validate(updateCouponSchema),
   updateCouponController
 );
 
 // Delete a coupon (Admin only)
 router.delete(
   '/:id',
-  ...getDeleteStack(permissions.coupon.delete, deleteCouponSchema),
+  isAuthenticated,
+  rbac(permissions.coupon.delete),
+  validate(deleteCouponSchema),
   deleteCouponController
 );
 

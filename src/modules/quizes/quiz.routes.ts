@@ -1,13 +1,15 @@
+import { Router } from "express";
+import { isAuthenticated } from "../../middlewares/auth";
+import { rbac } from "../../middlewares/rbac.middleware";
+import { validate } from "../../middlewares/validate.middleware";
+import { cacheMiddleware } from "../../middlewares/cacheMiddleware";
 // src/modules/quizes/quiz.routes.ts
 
-import { Router } from "express";
 import {
   createQuizHandler,
   updateQuizHandler,
   deleteQuizHandler,
   getQuizHandler,
-  getQuizzesByChapterHandler,
-  getCourseQuizzesHandler,
   submitQuizAttemptHandler,
   getQuizResultsHandler,
 } from "./quiz.controller";
@@ -15,16 +17,9 @@ import {
   createQuizSchema,
   updateQuizSchema,
   quizIdSchema,
-  getChapterQuizzesSchema,
-  getCourseQuizzesSchema,
   submitQuizAttemptSchema,
   getQuizResultsSchema,
 } from "./quiz.validation";
-import { getCacheStack, getDeleteStack, getMutationStack } from "../../utils/middlewareStacks";
-import { isAuthenticated } from "../../middlewares/auth";
-import { cacheMiddleware } from "../../middlewares/cacheMiddleware";
-import { validate } from "../../middlewares/validate.middleware";
-import { requireEnrollmentForQuizParam } from "../../middlewares/enrollment.middleware";
 
 const router = Router();
 const QUIZ_CACHE_BASE = 'quizzes';
@@ -34,29 +29,38 @@ const QUIZ_CACHE_BASE = 'quizzes';
 // POST new quiz
 router.post(
   "/", 
-  ...getMutationStack('quiz:create', createQuizSchema), 
+  isAuthenticated,
+    rbac('quiz:create'),
+    validate(createQuizSchema), 
   createQuizHandler
 );
 
 // PATCH update quiz 
 router.patch(
   "/:id", 
-  ...getMutationStack('quiz:update', updateQuizSchema, quizIdSchema), 
+  isAuthenticated,
+    rbac('quiz:update'),
+    validate(quizIdSchema),
+    validate(updateQuizSchema), 
   updateQuizHandler
 );
 
 // DELETE quiz
 router.delete(
   "/:id", 
-  ...getDeleteStack('quiz:delete', quizIdSchema),
+  isAuthenticated,
+    rbac('quiz:delete'),
+    validate(quizIdSchema),
   deleteQuizHandler
 );
 
 // POST submit quiz attempt
 router.post(
   "/:id/submit", 
-  ...getMutationStack('quiz:submit', submitQuizAttemptSchema, quizIdSchema), 
-  requireEnrollmentForQuizParam,
+  isAuthenticated,
+    rbac('quiz:submit'),
+    validate(quizIdSchema),
+    validate(submitQuizAttemptSchema), 
   submitQuizAttemptHandler
 );
 
@@ -65,22 +69,10 @@ router.post(
 // GET single quiz
 router.get(
     "/:id", 
-    ...getCacheStack(QUIZ_CACHE_BASE, { param: 'id' }, quizIdSchema),
+    isAuthenticated,
+    cacheMiddleware(QUIZ_CACHE_BASE, { param: 'id' }),
+    validate(quizIdSchema),
     getQuizHandler
-);
-
-// GET all quizzes for a chapter
-router.get(
-    "/chapter/:chapterId", 
-    ...getCacheStack(`${QUIZ_CACHE_BASE}:chapterId`, { param: 'chapterId' }, getChapterQuizzesSchema),
-    getQuizzesByChapterHandler
-);
-
-// GET all quizzes for a course
-router.get(
-    "/course/:courseId", 
-    ...getCacheStack(`${QUIZ_CACHE_BASE}:courseId`, { param: 'courseId' }, getCourseQuizzesSchema),
-    getCourseQuizzesHandler
 );
 
 // GET quiz results for a course

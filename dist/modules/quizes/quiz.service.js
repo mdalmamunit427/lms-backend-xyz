@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getQuizResultsService = exports.submitQuizAttemptService = exports.getCourseQuizzesService = exports.getQuizzesByChapterService = exports.getQuizByIdService = exports.deleteQuizService = exports.updateQuizService = exports.createQuizService = void 0;
+exports.getQuizResultsService = exports.submitQuizAttemptService = exports.getQuizByIdService = exports.deleteQuizService = exports.updateQuizService = exports.createQuizService = void 0;
 const errorHandler_1 = require("../../utils/errorHandler");
 const errorHandler_2 = require("../../utils/errorHandler");
 const withTransaction_1 = require("../../utils/withTransaction");
@@ -49,7 +49,7 @@ const createQuizService = async (data, userId, userRole) => {
                 throw new errorHandler_1.AppError("Either lecture ID or both course and chapter IDs must be provided", 400);
             }
             // 2. SECURITY: Enforce course ownership
-            await (0, ownership_1.validateCourseAndOwnership)(courseId, userId, userRole, session);
+            await (0, ownership_1.validateCourseAndOwnership)(courseId, userId, userRole);
             // 3. Validate chapter belongs to course
             const chapter = await (0, chapterReorder_1.validateChapterBelongsToCourse)(chapterId, courseId, session);
             // 4. Auto-calculate order if not provided
@@ -81,8 +81,6 @@ const createQuizService = async (data, userId, userRole) => {
             }
             // 8. Invalidate caches
             await (0, cache_1.invalidateCache)(`${QUIZ_CACHE_BASE}:${quiz._id}`);
-            await (0, cache_1.invalidateCache)(`${QUIZ_CACHE_BASE}:chapterId=${chapter._id}`);
-            await (0, cache_1.invalidateCache)(`${QUIZ_CACHE_BASE}:courseId=${courseId}`);
             await (0, cache_1.invalidateCache)(`chapter:${chapter._id}`);
             await (0, cache_1.invalidateCache)(`course:id=${courseId}`);
             return quiz;
@@ -112,7 +110,7 @@ const updateQuizService = async (id, data, userId, userRole) => {
             if (!quiz)
                 throw new errorHandler_1.AppError("Quiz not found", 404);
             // 1. SECURITY: Enforce ownership
-            await (0, ownership_1.validateCourseAndOwnership)(quiz.course.toString(), userId, userRole, session);
+            await (0, ownership_1.validateCourseAndOwnership)(quiz.course.toString(), userId, userRole);
             // 2. Check if order is being changed
             const isOrderChange = data.order !== undefined && data.order !== quiz.order;
             if (isOrderChange) {
@@ -134,8 +132,6 @@ const updateQuizService = async (id, data, userId, userRole) => {
             // 4. Invalidate caches (batch, non-blocking)
             Promise.all([
                 (0, cache_1.invalidateCache)(`${QUIZ_CACHE_BASE}:${quiz._id}`),
-                (0, cache_1.invalidateCache)(`${QUIZ_CACHE_BASE}:chapterId=${quiz.chapter}`),
-                (0, cache_1.invalidateCache)(`${QUIZ_CACHE_BASE}:courseId=${quiz.course}`),
                 (0, cache_1.invalidateCache)(`chapter:${quiz.chapter}`),
             ]).catch(err => console.error('Cache invalidation failed (non-blocking):', err?.message || err));
             await (0, cache_1.invalidateCache)(`course:id=${quiz.course}`);
@@ -166,7 +162,7 @@ const deleteQuizService = async (id, userId, userRole) => {
             if (!quiz)
                 throw new errorHandler_1.AppError("Quiz not found", 404);
             // 1. SECURITY: Enforce ownership
-            await (0, ownership_1.validateCourseAndOwnership)(quiz.course.toString(), userId, userRole, session);
+            await (0, ownership_1.validateCourseAndOwnership)(quiz.course.toString(), userId, userRole);
             // 2. Remove from chapter content
             await chapter_model_1.default.updateOne({ "content.refId": quiz._id }, { $pull: { content: { refId: quiz._id } } }, { session });
             // 3. Delete quiz
@@ -174,8 +170,6 @@ const deleteQuizService = async (id, userId, userRole) => {
             // 4. Invalidate caches
             if (deletedQuiz) {
                 await (0, cache_1.invalidateCache)(`${QUIZ_CACHE_BASE}:${id}`);
-                await (0, cache_1.invalidateCache)(`${QUIZ_CACHE_BASE}:chapterId=${deletedQuiz.chapter}`);
-                await (0, cache_1.invalidateCache)(`${QUIZ_CACHE_BASE}:courseId=${deletedQuiz.course}`);
                 await (0, cache_1.invalidateCache)(`chapter:${deletedQuiz.chapter}`);
                 await (0, cache_1.invalidateCache)(`course:id=${deletedQuiz.course}`);
             }
@@ -199,7 +193,7 @@ exports.deleteQuizService = deleteQuizService;
 /**
  * Get quiz by ID with security filtering
  */
-const getQuizByIdService = async (id, cacheKey, isEnrolled) => {
+const getQuizByIdService = async (id, cacheKey, userId, userRole) => {
     try {
         const quiz = await quiz_model_1.default.findById(id)
             .populate('course', 'title')
@@ -212,14 +206,25 @@ const getQuizByIdService = async (id, cacheKey, isEnrolled) => {
                 errors: ['No quiz found with the provided ID']
             };
         }
-        // SECURITY: Hide correct answers if not enrolled or instructor/admin
+        // Check enrollment status
+        let isEnrolled = false;
+        if (userRole === 'admin' || userRole === 'instructor') {
+            isEnrolled = true;
+        }
+        else if (userRole === 'student') {
+            const enrollment = await enrollment_model_1.default.findOne({
+                student: userId,
+                course: quiz.course
+            });
+            isEnrolled = !!enrollment;
+        }
+        // SECURITY: Block complete access if not enrolled
         if (!isEnrolled) {
-            quiz.questions = quiz.questions.map(q => ({
-                questionText: q.questionText,
-                options: q.options,
-                correctAnswer: -1, // Hide correct answer
-                explanation: undefined // Hide explanation
-            }));
+            return {
+                success: false,
+                message: 'Access denied',
+                errors: ['You must be enrolled in this course to access quiz content']
+            };
         }
         const responseData = { quiz, cached: false };
         await (0, cache_1.setCache)(cacheKey, responseData);
@@ -238,77 +243,6 @@ const getQuizByIdService = async (id, cacheKey, isEnrolled) => {
     }
 };
 exports.getQuizByIdService = getQuizByIdService;
-/**
- * Get quizzes by chapter
- */
-const getQuizzesByChapterService = async (chapterId, cacheKey, isEnrolled) => {
-    try {
-        const quizzes = await quiz_model_1.default.find({ chapter: chapterId }).sort({ order: 1 }).lean();
-        // SECURITY: Hide answers for non-enrolled users
-        if (!isEnrolled) {
-            quizzes.forEach(quiz => {
-                quiz.questions = quiz.questions.map(q => ({
-                    questionText: q.questionText,
-                    options: q.options,
-                    correctAnswer: -1,
-                    explanation: undefined
-                }));
-            });
-        }
-        const responseData = { quizzes, cached: false };
-        await (0, cache_1.setCache)(cacheKey, responseData);
-        return {
-            success: true,
-            data: responseData,
-            message: 'Quizzes retrieved successfully'
-        };
-    }
-    catch (error) {
-        return {
-            success: false,
-            message: 'Failed to retrieve quizzes',
-            errors: [error.message]
-        };
-    }
-};
-exports.getQuizzesByChapterService = getQuizzesByChapterService;
-/**
- * Get quizzes by course
- */
-const getCourseQuizzesService = async (courseId, cacheKey, isEnrolled) => {
-    try {
-        const quizzes = await quiz_model_1.default.find({ course: courseId })
-            .populate('chapter', 'title order')
-            .sort({ order: 1 })
-            .lean();
-        // SECURITY: Hide answers for non-enrolled users
-        if (!isEnrolled) {
-            quizzes.forEach(quiz => {
-                quiz.questions = quiz.questions.map(q => ({
-                    questionText: q.questionText,
-                    options: q.options,
-                    correctAnswer: -1,
-                    explanation: undefined
-                }));
-            });
-        }
-        const responseData = { quizzes, cached: false };
-        await (0, cache_1.setCache)(cacheKey, responseData);
-        return {
-            success: true,
-            data: responseData,
-            message: 'Course quizzes retrieved successfully'
-        };
-    }
-    catch (error) {
-        return {
-            success: false,
-            message: 'Failed to retrieve course quizzes',
-            errors: [error.message]
-        };
-    }
-};
-exports.getCourseQuizzesService = getCourseQuizzesService;
 /**
  * Submit quiz attempt
  */
@@ -422,6 +356,18 @@ exports.submitQuizAttemptService = submitQuizAttemptService;
  */
 const getQuizResultsService = async (userId, courseId) => {
     try {
+        // Check if user is enrolled in the course
+        const enrollment = await enrollment_model_1.default.findOne({
+            student: userId,
+            course: courseId
+        });
+        if (!enrollment) {
+            return {
+                success: false,
+                message: 'Not enrolled in this course',
+                errors: ['You must be enrolled in the course to view quiz results']
+            };
+        }
         const quizzes = await quiz_model_1.default.find({ course: courseId }).sort({ order: 1 });
         const courseProgress = await progress_model_1.default.findOne({ user: userId, course: courseId });
         const result = {

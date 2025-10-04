@@ -9,17 +9,36 @@ import { catchAsync } from "../../middlewares/catchAsync";
 import { getUserId, getUserRole } from "../../utils/common";
 import { sendSuccess, sendCreated, sendError } from "../../utils/response";
 import { AuthRequest } from "../../middlewares/auth";
+import Enrollment from "../enrollments/enrollment.model";
 
 // --- Type Definitions ---
 interface QuizAuthRequest extends AuthRequest {
     cacheKey?: string;
     params: {
         id?: string;
-        chapterId?: string;
         courseId?: string;
     };
     body: any; 
 }
+
+// --- Helper Functions ---
+const checkEnrollmentStatus = async (userId: string, userRole: string, courseId?: string): Promise<boolean> => {
+    // Admins and instructors always have access
+    if (userRole === 'admin' || userRole === 'instructor') {
+        return true;
+    }
+    
+    // Students need to be enrolled in the course
+    if (userRole === 'student' && courseId) {
+        const enrollment = await Enrollment.findOne({ 
+            student: userId, 
+            course: courseId 
+        });
+        return !!enrollment;
+    }
+    
+    return false;
+};
 
 // --- CONTROLLER HANDLERS ---
 
@@ -89,11 +108,10 @@ export const getQuizHandler = catchAsync(async (req: QuizAuthRequest, res: Respo
         return sendError(res, 'Cache key missing from request', 500);
     }
     
-    // Check if user is enrolled to determine if answers should be included
+    const userId = getUserId(req);
     const userRole = getUserRole(req);
-    const isEnrolled = userRole === 'admin' || userRole === 'instructor' || false;
 
-    const result = await quizService.getQuizByIdService(req.params.id!, cacheKey, isEnrolled);
+    const result = await quizService.getQuizByIdService(req.params.id!, cacheKey, userId, userRole);
 
     if (!result.success) {
         return sendError(res, result.message || 'Quiz not found', 404, result.errors);
@@ -102,41 +120,6 @@ export const getQuizHandler = catchAsync(async (req: QuizAuthRequest, res: Respo
     return sendSuccess(res, result.data, 'Quiz retrieved successfully', 200, { cached: !!cacheKey });
 });
 
-export const getQuizzesByChapterHandler = catchAsync(async (req: QuizAuthRequest, res: Response) => {
-    const cacheKey = req.cacheKey;
-    if (!cacheKey) {
-        return sendError(res, 'Cache key missing from request', 500);
-    }
-
-    const userRole = getUserRole(req);
-    const isEnrolled = userRole === 'admin' || userRole === 'instructor' || false;
-
-    const result = await quizService.getQuizzesByChapterService(req.params.chapterId!, cacheKey, isEnrolled);
-    
-    if (!result.success) {
-        return sendError(res, result.message || 'Failed to retrieve quizzes', 500, result.errors);
-    }
-    
-    return sendSuccess(res, result.data, 'Quizzes retrieved successfully', 200, { cached: !!cacheKey });
-});
-
-export const getCourseQuizzesHandler = catchAsync(async (req: QuizAuthRequest, res: Response) => {
-    const cacheKey = req.cacheKey;
-    if (!cacheKey) {
-        return sendError(res, 'Cache key missing from request', 500);
-    }
-
-    const userRole = getUserRole(req);
-    const isEnrolled = userRole === 'admin' || userRole === 'instructor' || false;
-
-    const result = await quizService.getCourseQuizzesService(req.params.courseId!, cacheKey, isEnrolled);
-    
-    if (!result.success) {
-        return sendError(res, result.message || 'Failed to retrieve course quizzes', 500, result.errors);
-    }
-    
-    return sendSuccess(res, result.data, 'Course quizzes retrieved successfully', 200, { cached: !!cacheKey });
-});
 
 export const submitQuizAttemptHandler = catchAsync(async (req: QuizAuthRequest, res: Response) => {
     const userId = getUserId(req);

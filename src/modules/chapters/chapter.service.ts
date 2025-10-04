@@ -2,13 +2,12 @@
 
 import mongoose, { Schema, Types } from "mongoose";
 import Lecture, { ILecture } from "../lectures/lecture.model";
-import Course, { ICourse } from "../courses/course.model";
-import { AppError } from "../../utils/errorHandler";
 import { createError } from "../../utils/errorHandler";
 import { withTransaction } from "../../utils/withTransaction";
 import Chapter, { IChapter } from "./chapter.model";
 import { invalidateCache, setCache } from "../../utils/cache";
 import { validateCourseAndOwnership } from "../../utils/ownership";
+import { updateCourseDuration } from "../courses/course.service";
 import { ServiceResponse } from "../../@types/api";
 import { reorderChapterItemsWithConflictResolution, reorderCourseChaptersWithConflictResolution } from "../../utils/chapterReorder";
 
@@ -26,11 +25,30 @@ export type IReorderItem = {
 export type ILectureData = Omit<ILecture, "chapter" | "course" | "order">;
 export type UserRole = 'admin' | 'instructor' | 'student';
 
+// Utility function to update chapter duration (optimized - minimal DB calls)
+export const updateChapterDuration = async (chapterId: string, session?: any): Promise<void> => {
+  const chapter = await Chapter.findById(chapterId).session(session);
+  if (!chapter) return;
+
+  // Get all lectures in this chapter (only duration field)
+  const lectures = await Lecture.find({ chapter: chapterId }).select('duration').session(session);
+  
+  // Calculate total duration
+  const totalDuration = lectures.reduce((total, lecture) => total + (lecture.duration || 0), 0);
+  
+  // Update chapter duration
+  chapter.chapterDuration = totalDuration;
+  await chapter.save({ session });
+
+  // Note: Course duration will be calculated by aggregation pipeline on next API call
+  // This avoids unnecessary DB calls for course updates
+};
+
 export const createChapter = async (data: ICreateChapterData, userId: string, userRole: UserRole): Promise<ServiceResponse<IChapter>> => {
   try {
     const chapter = await withTransaction(async (session) => {
       // SECURITY: Enforce ownership
-      await validateCourseAndOwnership(data.course, userId, userRole, session);
+      await validateCourseAndOwnership(data.course, userId, userRole);
 
       let order: number;
       
@@ -38,7 +56,12 @@ export const createChapter = async (data: ICreateChapterData, userId: string, us
         // Use smart conflict resolution for specified order
         // Create chapter with temporary order first (since order field is required)
         const tempOrder = (await Chapter.countDocuments({ course: data.course }).session(session)) + 1000; // High temporary order
-        const createdChapters = await Chapter.create([{ ...data, order: tempOrder }], { session, ordered: true });
+        const createdChapters = await Chapter.create([{ 
+          title: data.title,
+          course: data.course,
+          order: tempOrder,
+          chapterDuration: 0
+        }], { session, ordered: true });
         
         if (createdChapters.length === 0 || !createdChapters[0]) {
           throw createError("Failed to create chapter", 500);
@@ -64,7 +87,12 @@ export const createChapter = async (data: ICreateChapterData, userId: string, us
       } else {
         // Auto-calculate order (existing behavior)
         order = (await Chapter.countDocuments({ course: data.course }).session(session)) + 1;
-        const [chapter] = await Chapter.create([{ ...data, order }], { session, ordered: true});
+        const [chapter] = await Chapter.create([{ 
+          title: data.title,
+          course: data.course,
+          order: order,
+          chapterDuration: 0
+        }], { session, ordered: true});
 
         // Invalidate relevant caches (batch, non-blocking)
         Promise.all([
@@ -102,7 +130,7 @@ export const createChapterWithLectures = async (
   try {
     const result = await withTransaction(async (session: mongoose.ClientSession) => {
       // 1. SECURITY: Enforce ownership
-      await validateCourseAndOwnership(chapterData.course, userId, userRole, session);
+      await validateCourseAndOwnership(chapterData.course, userId, userRole);
 
       let chapter: IChapter;
       
@@ -110,13 +138,21 @@ export const createChapterWithLectures = async (
         // Use smart conflict resolution for specified order
         // Create chapter with temporary high order first (since order field is required)
         const tempOrder = (await Chapter.countDocuments({ course: chapterData.course }).session(session)) + 1000;
-        const createdChapters = await Chapter.create([{ ...chapterData, order: tempOrder }], { session, ordered: true });
+        const chapterDataClean = { 
+          title: chapterData.title,
+          course: chapterData.course,
+          order: tempOrder,
+          chapterDuration: 0
+        };
+        const createdChapters = await Chapter.create([chapterDataClean], { session, ordered: true });
         
         if (createdChapters.length === 0 || !createdChapters[0]) {
           throw createError("Failed to create chapter", 500);
         }
         
         chapter = createdChapters[0];
+        // Explicitly remove content field if it exists using MongoDB operation
+        await Chapter.findByIdAndUpdate(chapter._id, { $unset: { content: 1 } }, { session });
         
         // Apply smart reorder logic to place the chapter at the desired position
         await reorderCourseChaptersWithConflictResolution(
@@ -127,13 +163,21 @@ export const createChapterWithLectures = async (
       } else {
         // Auto-calculate order (existing behavior)
         const order = (await Chapter.countDocuments({ course: chapterData.course }).session(session)) + 1;
-        const createdChapters = await Chapter.create([{ ...chapterData, order }], { session, ordered: true });
+        const chapterDataClean = { 
+          title: chapterData.title,
+          course: chapterData.course,
+          order: order,
+          chapterDuration: 0
+        };
+        const createdChapters = await Chapter.create([chapterDataClean], { session, ordered: true });
         
         if (createdChapters.length === 0 || !createdChapters[0]) {
           throw createError("Failed to create chapter", 500);
         }
         
         chapter = createdChapters[0];
+        // Explicitly remove content field if it exists using MongoDB operation
+        await Chapter.findByIdAndUpdate(chapter._id, { $unset: { content: 1 } }, { session });
       }
 
       // 4. Prepare lecture data
@@ -147,16 +191,19 @@ export const createChapterWithLectures = async (
       // 5. Create lectures (Transactional part 2) - FIX: Added ordered: true
       const createdLectures = await Lecture.create(lecturesToCreate, { session, ordered: true });
 
-      // 6. Attach lectures to chapter content array
-      chapter.content = createdLectures.map((lec) => ({
-        type: "lecture" as const,
-        refId: lec._id as Types.ObjectId,
-        title: lec.title,
-        isPreview: lec.isPreview
-      }));
+      // 6. Lectures are now stored in lectures collection - no need to update chapter content
+
+      // 7. Calculate and update chapter duration
+      const newChapterDuration = createdLectures.reduce((total, lecture) => total + (lecture.duration || 0), 0);
+      chapter.chapterDuration = newChapterDuration;
+      // Explicitly remove content field before saving using MongoDB operation
+      await Chapter.findByIdAndUpdate(chapter._id, { $unset: { content: 1 } }, { session });
       await chapter.save({ session });
 
-      // 7. Invalidate caches
+      // 8. Update course total duration in database
+      await updateCourseDuration(chapterData.course, undefined, session);
+
+      // 9. Invalidate caches
       await invalidateCache(`course:id=${chapterData.course}`);
       await invalidateCache(`${CHAPTER_CACHE_BASE}:courseId=${chapterData.course}`);
       await invalidateCache("courses:list");
@@ -189,7 +236,7 @@ export const updateChapter = async (id: string, data: IUpdateChapterData, userId
       if (!chapter) throw createError("Chapter not found", 404);
 
       // SECURITY: Enforce ownership check on the course the chapter belongs to
-      await validateCourseAndOwnership(chapter.course.toString(), userId, userRole, session);
+      await validateCourseAndOwnership(chapter.course.toString(), userId, userRole);
 
       if (data.title !== undefined) chapter.title = data.title;
 
@@ -234,7 +281,7 @@ export const deleteChapterService = async (chapterId: string, userId: string, us
             if (!chapter) throw createError("Chapter not found", 404);
 
             // 1. SECURITY: Enforce ownership
-            await validateCourseAndOwnership(chapter.course.toString(), userId, userRole, session);
+            await validateCourseAndOwnership(chapter.course.toString(), userId, userRole);
 
             // 2. CASCADING DELETE: Delete all associated Lectures (Lessons)
             // If this fails, the chapter deletion will roll back.
@@ -279,7 +326,7 @@ export const reorderChaptersWithLectures = async (
     try {
         await withTransaction(async (session) => {
             // 1. SECURITY: Enforce ownership
-            await validateCourseAndOwnership(courseId, userId, userRole, session);
+            await validateCourseAndOwnership(courseId, userId, userRole);
 
             // Note: Validation is handled by the smart reorder functions
 
@@ -401,3 +448,4 @@ export const getChapterById = async (id: string, cacheKey: string): Promise<Serv
     };
   }
 };
+

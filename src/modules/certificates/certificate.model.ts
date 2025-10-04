@@ -22,4 +22,4 @@ const CertificateSchema: Schema = new Schema(
 CertificateSchema.index({ user: 1, course: 1 }, { unique: true });
 
 const CertificateModel = mongoose.model<ICertificate>('Certificate', CertificateSchema);
-export default  CertificateModel;
+export default CertificateModel;

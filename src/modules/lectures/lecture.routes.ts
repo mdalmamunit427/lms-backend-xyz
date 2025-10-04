@@ -1,6 +1,10 @@
 // src/modules/lectures/lecture.routes.ts (OPTIMIZED)
 
 import { Router } from "express";
+import { isAuthenticated } from "../../middlewares/auth";
+import { rbac } from "../../middlewares/rbac.middleware";
+import { validate } from "../../middlewares/validate.middleware";
+import { cacheMiddleware } from "../../middlewares/cacheMiddleware";
 import {
   createLectureHandler,
   updateLectureHandler,
@@ -9,56 +13,63 @@ import {
   getLecturesByChapterHandler,
   reorderLecturesHandler,
 } from "./lecture.controller";
-import { getCacheStack, getDeleteStack, getMutationStack } from "../../utils/middlewareStacks";
 import { chapterIdSchema, createLectureSchema, lectureIdSchema, reorderLecturesSchema, updateLectureSchema } from "./lecture.validation";
 
 const router = Router();
 const LECTURE_CACHE_BASE = 'lectures';
 
-// --- MUTATION ROUTES (Concise Stacks) ---
-
 // POST new lecture
 router.post(
   "/", 
-  ...getMutationStack('lecture:create', createLectureSchema), 
+  isAuthenticated,
+    rbac('lecture:create'),
+    validate(createLectureSchema), 
   createLectureHandler
 );
 
 // PATCH update lecture 
 router.patch(
   "/:id", 
-  ...getMutationStack('lecture:update', updateLectureSchema, lectureIdSchema), 
+  isAuthenticated,
+    rbac('lecture:update'),
+    validate(lectureIdSchema),
+    validate(updateLectureSchema), 
   updateLectureHandler
 );
 
 // DELETE lecture (Transactional cascading delete)
 router.delete(
   "/:id", 
-  ...getDeleteStack('lecture:delete', lectureIdSchema),
+  isAuthenticated,
+    rbac('lecture:delete'),
+    validate(lectureIdSchema),
   deleteLectureHandler
 );
 
 // POST Reorder lectures within a chapter
 router.post(
   "/reorder", 
- ...getMutationStack('lecture:update', reorderLecturesSchema),
+ isAuthenticated,
+    rbac('lecture:update'),
+    validate(reorderLecturesSchema),
   reorderLecturesHandler
 );
-
-
-// --- READ ROUTES (Concise Stacks) ---
 
 // GET single lecture (Public view)
 router.get(
     "/:id", 
-    ...getCacheStack(LECTURE_CACHE_BASE, { param: 'id' }, lectureIdSchema),
+    isAuthenticated,
+    cacheMiddleware(LECTURE_CACHE_BASE, { param: 'id' }),
+    validate(lectureIdSchema),
     getLectureHandler
 );
 
 // GET all lectures for a chapter (List view)
 router.get(
     "/chapter/:chapterId", 
-    ...getCacheStack(`${LECTURE_CACHE_BASE}:chapterId`, { param: 'chapterId' }, chapterIdSchema),
+    isAuthenticated,
+    cacheMiddleware(`${LECTURE_CACHE_BASE}:chapterId`, { param: 'chapterId' }),
+    validate(chapterIdSchema),
     getLecturesByChapterHandler
 );
 

@@ -136,5 +136,5 @@ export const reorderLecturesHandler = catchAsync(async (req: LectureAuthRequest,
         return sendError(res, result.message || 'Lecture reordering failed', 400, result.errors);
     }
     
-    return sendSuccess(res, undefined, 'Lectures reordered successfully');
+    return sendSuccess(res, result.data, 'Lectures reordered successfully');
 });

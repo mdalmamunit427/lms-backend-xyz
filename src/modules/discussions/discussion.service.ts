@@ -8,6 +8,7 @@ import { invalidateCache, setCache } from "../../utils/cache";
 import Discussion, { IDiscussion } from "./discussion.model";
 import Lecture from "../lectures/lecture.model";
 import Course from "../courses/course.model";
+import Enrollment from "../enrollments/enrollment.model";
 import { createNotification } from "../notifications/notification.service";
 import { ServiceResponse } from "../../@types/api";
 
@@ -27,6 +28,16 @@ export const createDiscussionService = async (
         const discussion = await withTransaction(async (session) => {
             const lecture = await Lecture.findById(lectureId).session(session);
             if (!lecture) throw createError('Lecture not found', 404);
+            
+            // Check if user is enrolled in the course
+            const enrollment = await Enrollment.findOne({ 
+                student: userId, 
+                course: lecture.course 
+            }).session(session);
+            
+            if (!enrollment) {
+                throw createError('Must be enrolled in the course to create discussions', 403);
+            }
             
             const [discussion] = await Discussion.create([{
                 user: userId,
@@ -86,6 +97,18 @@ export const answerQuestionService = async (
             const discussion = await Discussion.findById(discussionId).session(session);
             if (!discussion) throw createError('Discussion not found', 404);
             
+            // Check if user is enrolled in the course (unless they are instructor/admin)
+            if (!isInstructor) {
+                const enrollment = await Enrollment.findOne({ 
+                    student: userId, 
+                    course: discussion.course 
+                }).session(session);
+                
+                if (!enrollment) {
+                    throw createError('Must be enrolled in the course to answer discussions', 403);
+                }
+            }
+            
             discussion.answers.push({
                 user: userId as any,
                 text,
@@ -138,16 +161,30 @@ export const answerQuestionService = async (
 export const updateDiscussionService = async (
   discussionId: string, 
   userId: string, 
-  question: string
+  question: string,
+  userRole?: string
 ): Promise<ServiceResponse<IDiscussion>> => {
     try {
         const discussion = await withTransaction(async (session) => {
-            const discussion = await Discussion.findOne({ 
-                _id: discussionId, 
-                user: userId 
-            }).session(session);
+            const discussion = await Discussion.findById(discussionId).session(session);
+            if (!discussion) throw createError('Discussion not found', 404);
             
-            if (!discussion) throw createError('Discussion not found or unauthorized', 404);
+            // Check permissions: original poster, course instructor, or admin
+            const isOriginalPoster = discussion.user.toString() === userId;
+            const isAdmin = userRole === 'admin';
+            let isCourseInstructor = false;
+            
+            if (!isOriginalPoster && !isAdmin) {
+                // Check if user is the course instructor
+                const course = await Course.findById(discussion.course).session(session);
+                if (course && course.instructor.toString() === userId) {
+                    isCourseInstructor = true;
+                }
+            }
+            
+            if (!isOriginalPoster && !isAdmin && !isCourseInstructor) {
+                throw createError('Unauthorized: Only the original poster, course instructor, or admin can update discussions', 403);
+            }
             
             discussion.question = question;
             await discussion.save({ session });
@@ -180,16 +217,33 @@ export const updateDiscussionService = async (
  */
 export const deleteDiscussionService = async (
   discussionId: string, 
-  userId: string
+  userId: string,
+  userRole?: string
 ): Promise<ServiceResponse<any>> => {
     try {
         await withTransaction(async (session) => {
-            const discussion = await Discussion.findOneAndDelete({ 
-                _id: discussionId, 
-                user: userId 
-            }, { session });
+            const discussion = await Discussion.findById(discussionId).session(session);
+            if (!discussion) throw createError('Discussion not found', 404);
             
-            if (!discussion) throw createError('Discussion not found or unauthorized', 404);
+            // Check permissions: original poster, course instructor, or admin
+            const isOriginalPoster = discussion.user.toString() === userId;
+            const isAdmin = userRole === 'admin';
+            let isCourseInstructor = false;
+            
+            if (!isOriginalPoster && !isAdmin) {
+                // Check if user is the course instructor
+                const course = await Course.findById(discussion.course).session(session);
+                if (course && course.instructor.toString() === userId) {
+                    isCourseInstructor = true;
+                }
+            }
+            
+            if (!isOriginalPoster && !isAdmin && !isCourseInstructor) {
+                throw createError('Unauthorized: Only the original poster, course instructor, or admin can delete discussions', 403);
+            }
+            
+            // Delete the discussion
+            await Discussion.findByIdAndDelete(discussionId).session(session);
             
             // Invalidate caches (matching the cache key patterns from routes)
             await invalidateCache(`${DISCUSSION_CACHE_BASE}:id=${discussionId}`);

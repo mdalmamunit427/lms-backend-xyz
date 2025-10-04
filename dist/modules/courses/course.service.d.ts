@@ -6,6 +6,7 @@ type CourseQueryOptions = {
     category?: string;
     cacheKey?: string;
 };
+export declare const updateCourseDuration: (courseId: string, newDuration?: number, session?: any) => Promise<void>;
 export declare const createCourse: (courseData: any, instructorId: string) => Promise<ServiceResponse<any>>;
 export declare const updateCourse: (courseId: string, updateData: any, instructorId: string, instructorRole: string) => Promise<ServiceResponse<any>>;
 export declare const deleteCourse: (courseId: string, instructorId: string, instructorRole: string) => Promise<ServiceResponse<null>>;

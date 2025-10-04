@@ -33,12 +33,32 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getQuizResultsHandler = exports.submitQuizAttemptHandler = exports.getCourseQuizzesHandler = exports.getQuizzesByChapterHandler = exports.getQuizHandler = exports.deleteQuizHandler = exports.updateQuizHandler = exports.createQuizHandler = void 0;
+exports.getQuizResultsHandler = exports.submitQuizAttemptHandler = exports.getQuizHandler = exports.deleteQuizHandler = exports.updateQuizHandler = exports.createQuizHandler = void 0;
 const quizService = __importStar(require("./quiz.service"));
 const catchAsync_1 = require("../../middlewares/catchAsync");
 const common_1 = require("../../utils/common");
 const response_1 = require("../../utils/response");
+const enrollment_model_1 = __importDefault(require("../enrollments/enrollment.model"));
+// --- Helper Functions ---
+const checkEnrollmentStatus = async (userId, userRole, courseId) => {
+    // Admins and instructors always have access
+    if (userRole === 'admin' || userRole === 'instructor') {
+        return true;
+    }
+    // Students need to be enrolled in the course
+    if (userRole === 'student' && courseId) {
+        const enrollment = await enrollment_model_1.default.findOne({
+            student: userId,
+            course: courseId
+        });
+        return !!enrollment;
+    }
+    return false;
+};
 // --- CONTROLLER HANDLERS ---
 exports.createQuizHandler = (0, catchAsync_1.catchAsync)(async (req, res) => {
     const userId = (0, common_1.getUserId)(req);
@@ -78,40 +98,13 @@ exports.getQuizHandler = (0, catchAsync_1.catchAsync)(async (req, res) => {
     if (!cacheKey) {
         return (0, response_1.sendError)(res, 'Cache key missing from request', 500);
     }
-    // Check if user is enrolled to determine if answers should be included
+    const userId = (0, common_1.getUserId)(req);
     const userRole = (0, common_1.getUserRole)(req);
-    const isEnrolled = userRole === 'admin' || userRole === 'instructor' || false;
-    const result = await quizService.getQuizByIdService(req.params.id, cacheKey, isEnrolled);
+    const result = await quizService.getQuizByIdService(req.params.id, cacheKey, userId, userRole);
     if (!result.success) {
         return (0, response_1.sendError)(res, result.message || 'Quiz not found', 404, result.errors);
     }
     return (0, response_1.sendSuccess)(res, result.data, 'Quiz retrieved successfully', 200, { cached: !!cacheKey });
-});
-exports.getQuizzesByChapterHandler = (0, catchAsync_1.catchAsync)(async (req, res) => {
-    const cacheKey = req.cacheKey;
-    if (!cacheKey) {
-        return (0, response_1.sendError)(res, 'Cache key missing from request', 500);
-    }
-    const userRole = (0, common_1.getUserRole)(req);
-    const isEnrolled = userRole === 'admin' || userRole === 'instructor' || false;
-    const result = await quizService.getQuizzesByChapterService(req.params.chapterId, cacheKey, isEnrolled);
-    if (!result.success) {
-        return (0, response_1.sendError)(res, result.message || 'Failed to retrieve quizzes', 500, result.errors);
-    }
-    return (0, response_1.sendSuccess)(res, result.data, 'Quizzes retrieved successfully', 200, { cached: !!cacheKey });
-});
-exports.getCourseQuizzesHandler = (0, catchAsync_1.catchAsync)(async (req, res) => {
-    const cacheKey = req.cacheKey;
-    if (!cacheKey) {
-        return (0, response_1.sendError)(res, 'Cache key missing from request', 500);
-    }
-    const userRole = (0, common_1.getUserRole)(req);
-    const isEnrolled = userRole === 'admin' || userRole === 'instructor' || false;
-    const result = await quizService.getCourseQuizzesService(req.params.courseId, cacheKey, isEnrolled);
-    if (!result.success) {
-        return (0, response_1.sendError)(res, result.message || 'Failed to retrieve course quizzes', 500, result.errors);
-    }
-    return (0, response_1.sendSuccess)(res, result.data, 'Course quizzes retrieved successfully', 200, { cached: !!cacheKey });
 });
 exports.submitQuizAttemptHandler = (0, catchAsync_1.catchAsync)(async (req, res) => {
     const userId = (0, common_1.getUserId)(req);

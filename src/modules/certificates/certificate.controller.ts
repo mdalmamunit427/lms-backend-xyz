@@ -9,6 +9,7 @@ import { generateCertificatePDF, CertificateData } from "../../utils/pdfGenerato
 import { getUserId, getUserRole, getPaginationParams } from "../../utils/common";
 import { sendSuccess, sendError, sendPaginated } from "../../utils/response";
 import { AuthRequest } from "../../middlewares/auth";
+import { getCacheWithTTL, setCache } from "../../utils/cache";
 
 // --- Type Definitions ---
 interface CertificateAuthRequest extends AuthRequest {
@@ -56,13 +57,18 @@ export const getUserCertificateHandler = catchAsync(async (req: CertificateAuthR
 
 export const getUserCertificatesHandler = catchAsync(async (req: CertificateAuthRequest, res: Response) => {
     const userId = getUserId(req);
-
-    const cacheKey = req.cacheKey;
-    if (!cacheKey) {
-        return sendError(res, 'Cache key missing from request', 500);
+    const { page, limit } = getPaginationParams(req);
+    
+    // Generate cache key manually for user-specific data
+    const cacheKey = `certificates:user:${userId}:page:${page}:limit:${limit}`;
+    
+    // Try to get from cache first
+    const cachedData = await getCacheWithTTL(cacheKey);
+    if (cachedData) {
+        const { certificates, pagination } = cachedData.data;
+        return sendPaginated(res, certificates, pagination, 'Certificates retrieved successfully', true);
     }
 
-    const { page, limit } = getPaginationParams(req);
     const options = {
         page,
         limit
@@ -79,7 +85,7 @@ export const getUserCertificatesHandler = catchAsync(async (req: CertificateAuth
     }
     
     const { data, pagination } = result.data!;
-    return sendPaginated(res, data, pagination, 'Certificates retrieved successfully', !!cacheKey);
+    return sendPaginated(res, data, pagination, 'Certificates retrieved successfully', false);
 });
 
 export const getCertificateByIdHandler = catchAsync(async (req: CertificateAuthRequest, res: Response) => {

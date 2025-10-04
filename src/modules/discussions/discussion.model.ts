@@ -32,6 +32,6 @@ const DiscussionSchema: Schema = new Schema(
 
 DiscussionSchema.index({ lecture: 1 });
 DiscussionSchema.index({ user: 1 });
- const DiscussionModel = mongoose.model<IDiscussion>('Discussion', DiscussionSchema);
+const DiscussionModel = mongoose.model<IDiscussion>('Discussion', DiscussionSchema);
 
 export default DiscussionModel;

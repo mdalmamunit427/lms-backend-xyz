@@ -1,6 +1,10 @@
 // src/modules/chapters/chapter.routes.ts (OPTIMIZED)
 
 import { Router } from "express";
+import { isAuthenticated } from "../../middlewares/auth";
+import { rbac } from "../../middlewares/rbac.middleware";
+import { validate } from "../../middlewares/validate.middleware";
+import { cacheMiddleware } from "../../middlewares/cacheMiddleware";
 import {
   createChapterHandler,
   createChapterWithLecturesHandler,
@@ -18,7 +22,6 @@ import {
   reorderChaptersWithLecturesSchema,
   getCourseChaptersSchema,
 } from "./chapter.validation";
-import { getCacheStack, getDeleteStack, getMutationStack } from "../../utils/middlewareStacks";
 
 const router = Router();
 const CHAPTER_CACHE_BASE = 'chapters';
@@ -28,35 +31,45 @@ const CHAPTER_CACHE_BASE = 'chapters';
 // POST new chapter
 router.post(
   "/", 
-  ...getMutationStack('chapter:create', createChapterSchema), 
+  isAuthenticated,
+    rbac('chapter:create'),
+    validate(createChapterSchema), 
   createChapterHandler
 );
 
 // POST new chapter with associated lectures (Transactional)
 router.post(
   "/with-lectures", 
-  ...getMutationStack('chapter:create', createChapterWithLecturesSchema), 
+  isAuthenticated,
+    rbac('chapter:create'),
+    validate(createChapterWithLecturesSchema), 
   createChapterWithLecturesHandler
 );
 
 // PATCH update chapter (Title or Order)
 router.patch(
   "/:id", 
-  ...getMutationStack('chapter:update', updateChapterSchema), 
+  isAuthenticated,
+    rbac('chapter:update'),
+    validate(updateChapterSchema), 
   updateChapterHandler
 );
 
 // DELETE chapter (Transactional cascading delete)
 router.delete(
   "/:id", 
-  ...getDeleteStack('chapter:delete', getChapterSchema), // getChapterSchema validates params.id
+  isAuthenticated,
+    rbac('chapter:delete'),
+    validate(getChapterSchema), // getChapterSchema validates params.id
   deleteChapterHandler 
 );
 
 // POST Reorder chapters and lectures (Transactional)
 router.post(
   "/reorder-with-lectures", 
-  ...getMutationStack('chapter:update', reorderChaptersWithLecturesSchema), 
+  isAuthenticated,
+    rbac('chapter:update'),
+    validate(reorderChaptersWithLecturesSchema), 
   reorderChaptersWithLecturesHandler
 );
 
@@ -65,7 +78,9 @@ router.post(
 router.get(
     "/course/:courseId", 
     // FIX APPLIED: Using the schema that correctly matches 'courseId'
-    ...getCacheStack(`${CHAPTER_CACHE_BASE}:courseId`, { param: 'courseId', isList: true }, getCourseChaptersSchema),
+    isAuthenticated,
+    cacheMiddleware(`${CHAPTER_CACHE_BASE}:courseId`, { param: 'courseId', isList: true }),
+    validate(getCourseChaptersSchema),
     getChaptersHandler
 );
 
@@ -73,7 +88,9 @@ router.get(
 router.get(
     "/:id", 
     // This correctly uses getChapterSchema because the param is 'id'
-    ...getCacheStack(CHAPTER_CACHE_BASE, { param: 'id' }, getChapterSchema),
+    isAuthenticated,
+    cacheMiddleware(CHAPTER_CACHE_BASE, { param: 'id' }),
+    validate(getChapterSchema),
     getChapterHandler
 );
 export default router;

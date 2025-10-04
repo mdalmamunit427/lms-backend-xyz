@@ -182,36 +182,13 @@ export const reorderChapterItemsWithConflictResolution = async (
  * 
  * @param chapterId - The chapter ID to update
  * @param session - MongoDB session for transaction support
+ * 
+ * NOTE: This function is deprecated since we removed the content array from chapters.
+ * Content is now dynamically generated from lectures and quizzes collections.
  */
 export const updateChapterContentArray = async (chapterId: string, session: any): Promise<void> => {
-    const chapter = await Chapter.findById(chapterId).session(session);
-    if (!chapter) return;
-
-    const [updatedLectures, updatedQuizzes] = await Promise.all([
-        Lecture.find({ chapter: chapterId }).sort({ order: 1 }).session(session),
-        Quiz.find({ chapter: chapterId }).sort({ order: 1 }).session(session)
-    ]);
-    
-    // Combine and sort by order
-    const allUpdatedItems = [
-        ...updatedLectures.map(lecture => ({
-            type: 'lecture' as const,
-            refId: lecture._id as any,
-            title: lecture.title,
-            isPreview: lecture.isPreview || false,
-            order: lecture.order
-        })),
-        ...updatedQuizzes.map(quiz => ({
-            type: 'quiz' as const,
-            refId: quiz._id as any,
-            title: quiz.title,
-            order: quiz.order
-        }))
-    ].sort((a, b) => a.order - b.order);
-    
-    // Remove the order field from content items (it's not stored in the schema)
-    chapter.content = allUpdatedItems.map(({ order, ...item }) => item);
-    await chapter.save({ session });
+    // No-op: Content is now dynamically generated from lectures/quizzes collections
+    // This function is kept for backward compatibility but does nothing
 };
 
 /**

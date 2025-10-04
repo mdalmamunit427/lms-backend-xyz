@@ -1,7 +1,7 @@
 "use strict";
 // src/modules/quizes/quiz.validation.ts
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getQuizResultsSchema = exports.submitQuizAttemptSchema = exports.getCourseQuizzesSchema = exports.getChapterQuizzesSchema = exports.quizIdSchema = exports.updateQuizSchema = exports.createQuizSchema = void 0;
+exports.getQuizResultsSchema = exports.submitQuizAttemptSchema = exports.quizIdSchema = exports.updateQuizSchema = exports.createQuizSchema = void 0;
 const zod_1 = require("zod");
 // Base Zod validator for MongoDB ObjectId format
 const objectIdSchema = zod_1.z.string()
@@ -57,18 +57,6 @@ exports.updateQuizSchema = zod_1.z.object({
 exports.quizIdSchema = zod_1.z.object({
     params: zod_1.z.object({
         id: objectIdSchema.describe("Quiz ID is required"),
-    }),
-});
-// Chapter ID Schema for listing quizzes
-exports.getChapterQuizzesSchema = zod_1.z.object({
-    params: zod_1.z.object({
-        chapterId: objectIdSchema.describe("Chapter ID is required"),
-    }),
-});
-// Course ID Schema for listing quizzes
-exports.getCourseQuizzesSchema = zod_1.z.object({
-    params: zod_1.z.object({
-        courseId: objectIdSchema.describe("Course ID is required"),
     }),
 });
 // Submit Quiz Attempt Schema

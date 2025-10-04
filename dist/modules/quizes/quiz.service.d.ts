@@ -17,15 +17,7 @@ export declare const deleteQuizService: (id: string, userId: string, userRole: U
 /**
  * Get quiz by ID with security filtering
  */
-export declare const getQuizByIdService: (id: string, cacheKey: string, isEnrolled: boolean) => Promise<ServiceResponse<any>>;
-/**
- * Get quizzes by chapter
- */
-export declare const getQuizzesByChapterService: (chapterId: string, cacheKey: string, isEnrolled: boolean) => Promise<ServiceResponse<any>>;
-/**
- * Get quizzes by course
- */
-export declare const getCourseQuizzesService: (courseId: string, cacheKey: string, isEnrolled: boolean) => Promise<ServiceResponse<any>>;
+export declare const getQuizByIdService: (id: string, cacheKey: string, userId: string, userRole: string) => Promise<ServiceResponse<any>>;
 /**
  * Submit quiz attempt
  */

@@ -1,4 +1,10 @@
-import { Router } from 'express';
+import { Router } from "express";
+import { isAuthenticated } from "../../middlewares/auth";
+import { rbac } from "../../middlewares/rbac.middleware";
+import { validate } from "../../middlewares/validate.middleware";
+import { cacheMiddleware } from "../../middlewares/cacheMiddleware";
+import { permissions } from "../../config/rbac";
+import { requireCourseOwnership } from "../../middlewares/courseOwnership.middleware";
 import {
   createCourseController,
   updateCourseController,
@@ -10,112 +16,103 @@ import {
   getCourseAnalyticsController,
   getCourseStatsController,
   getCoursesByInstructorController,
-} from './course.controller';
+} from "./course.controller";
 import {
   createCourseSchema,
   updateCourseSchema,
-  getCourseSchema, 
+  getCourseSchema,
   getInstructorCoursesSchema,
-} from './course.validation'; 
+} from "./course.validation";
 
 // --- IMPORTS FROM MIDDLEWARE UTILITIES ---
-import { getMutationStack, getDeleteStack, getCacheStack } from '../../utils/middlewareStacks';
-import { permissions } from '../../config/rbac'; 
-import { validate } from '../../middlewares/validate.middleware'; 
-import { cacheMiddleware } from '../../middlewares/cacheMiddleware';
-import { isAuthenticated } from '../../middlewares/auth';
-import { requireCourseOwnership } from '../../middlewares/courseOwnership.middleware';
-import { rbac } from '../../middlewares/rbac.middleware'; 
 
 const router = Router();
-const COURSE_CACHE_BASE = 'course'; 
+const COURSE_CACHE_BASE = "course";
 
-// ----------------------------------------------------------------------
-// --- PUBLIC READ ROUTES (No Params, Parameterized, Coupon) ---
-// ----------------------------------------------------------------------
-
-// Get all courses with pagination (Public List Route - Exception to the stack pattern)
-// NOTE: This route is manual because it validates QUERY params, not path params.
 router.get(
-  '/',
-  cacheMiddleware('courses:list', { isList: true }),
-  getAllCoursesController,
+  "/",
+  cacheMiddleware("courses:list", { isList: true }),
+  getAllCoursesController
 );
 
-// Enhanced course functionality routes - MUST come before /:id route
 // Get recommended courses for user
 router.get(
-  '/recommended',
+  "/recommended",
   isAuthenticated,
-  cacheMiddleware('courses:recommended', { isList: true }),
-  getRecommendedCoursesController,
+  cacheMiddleware("courses:recommended", { isList: true }),
+  getRecommendedCoursesController
 );
 
 // Get featured courses
 router.get(
-  '/featured',
-  cacheMiddleware('courses:featured', { isList: true }),
-  getFeaturedCoursesController,
+  "/featured",
+  cacheMiddleware("courses:featured", { isList: true }),
+  getFeaturedCoursesController
 );
 
-// Get a single course (Public, Parameterized)
+// Get a single course
 router.get(
-  '/:id',
+  "/:id",
   validate(getCourseSchema),
-  cacheMiddleware('course', { param: 'id' }),
-  getCourseByIdController,
+  cacheMiddleware("course", { param: "id" }),
+  getCourseByIdController
 );
 
-
-// Create a new course (POST /create)
+// Create a new course
 router.post(
-  '/create',
-  // Stack: Auth -> RBAC(create) -> Validate(createCourseSchema)
-  ...getMutationStack(permissions.course.create, createCourseSchema),
-  createCourseController,
+  "/create",
+  isAuthenticated,
+  rbac(permissions.course.create),
+  validate(createCourseSchema),
+  createCourseController
 );
 
 // Update a course (PUT /:id)
 router.put(
-  '/:id',
-  // Stack: Auth -> RBAC(update) -> Validate(getCourseSchema for params) -> Validate(updateCourseSchema for body)
-  ...getMutationStack(permissions.course.update, updateCourseSchema, getCourseSchema),
-  updateCourseController,
+  "/:id",
+  isAuthenticated,
+  rbac(permissions.course.update),
+  validate(getCourseSchema),
+  validate(updateCourseSchema),
+  updateCourseController
 );
 
 // Delete a course (DELETE /:id)
 router.delete(
-  '/:id',
-  // Stack: Auth -> RBAC(delete) -> Validate(getCourseSchema for params)
-  ...getDeleteStack(permissions.course.delete, getCourseSchema),
-  deleteCourseController,
+  "/:id",
+  isAuthenticated,
+  rbac(permissions.course.delete),
+  validate(getCourseSchema),
+  deleteCourseController
 );
 
 // Get course analytics (Instructor/Admin only - Course Owner only)
 router.get(
-  '/analytics/:id',
+  "/analytics/:id",
   isAuthenticated,
   rbac(permissions.course.analytics),
   validate(getCourseSchema),
   requireCourseOwnership,
-  getCourseAnalyticsController,
+  getCourseAnalyticsController
 );
 
 // Get course statistics (Instructor/Admin only - Course Owner only)
 router.get(
-  '/stats/:id',
+  "/stats/:id",
   isAuthenticated,
   rbac(permissions.course.stats),
   validate(getCourseSchema),
   requireCourseOwnership,
-  getCourseStatsController,
+  getCourseStatsController
 );
 
 // Get courses by instructor
 router.get(
-  '/instructor/:instructorId',
-  ...getCacheStack('courses:instructor', { param: 'instructorId' }, getInstructorCoursesSchema),
-  getCoursesByInstructorController,
+  "/instructor/:instructorId",
+  isAuthenticated,
+  cacheMiddleware("courses:instructor", { param: "instructorId" }),
+  validate(getInstructorCoursesSchema),
+  getCoursesByInstructorController
 );
 
 export default router;

@@ -39,6 +39,7 @@ const progressService = __importStar(require("./progress.service"));
 const catchAsync_1 = require("../../middlewares/catchAsync");
 const common_1 = require("../../utils/common");
 const response_1 = require("../../utils/response");
+const cache_1 = require("../../utils/cache");
 // --- CONTROLLER HANDLERS ---
 exports.updateLectureProgressHandler = (0, catchAsync_1.catchAsync)(async (req, res) => {
     const userId = (0, common_1.getUserId)(req);
@@ -68,10 +69,19 @@ const getCourseProgressHandler = async (req, res) => {
 exports.getCourseProgressHandler = getCourseProgressHandler;
 exports.getUserDashboardHandler = (0, catchAsync_1.catchAsync)(async (req, res) => {
     const userId = (0, common_1.getUserId)(req);
+    // Generate user-specific cache key
+    const cacheKey = `progress:dashboard:userId=${userId}`;
+    // Try to get from cache first
+    const cachedData = await (0, cache_1.getCacheWithTTL)(cacheKey);
+    if (cachedData && cachedData.data) {
+        return (0, response_1.sendSuccess)(res, cachedData.data, 'Dashboard retrieved from cache');
+    }
     const result = await progressService.getUserDashboard(userId);
     if (!result.success) {
         return (0, response_1.sendError)(res, result.message || 'Failed to retrieve dashboard', 500, result.errors);
     }
+    // Cache the result for 5 minutes
+    await (0, cache_1.setCache)(cacheKey, result.data, 300);
     return (0, response_1.sendSuccess)(res, result.data, 'Dashboard retrieved successfully');
 });
 exports.getCourseCompletionStatsHandler = (0, catchAsync_1.catchAsync)(async (req, res) => {

@@ -13,7 +13,17 @@ const errorHandler_1 = require("../../utils/errorHandler");
 // Importing the shared security helper
 const ownership_1 = require("../../utils/ownership");
 const chapterReorder_1 = require("../../utils/chapterReorder");
+const chapter_service_1 = require("../chapters/chapter.service");
 const LECTURE_CACHE_BASE = 'lectures';
+// Cache invalidation utility
+const invalidateLectureCaches = async (lectureId, chapterId, courseId) => {
+    Promise.all([
+        (0, cache_1.invalidateCache)(`${LECTURE_CACHE_BASE}:${lectureId}`),
+        (0, cache_1.invalidateCache)(`${LECTURE_CACHE_BASE}:chapterId=${chapterId}*`),
+        (0, cache_1.invalidateCache)(`chapter:${chapterId}`),
+        (0, cache_1.invalidateCache)(`course:id=${courseId}`),
+    ]).catch(err => console.error('Cache invalidation failed:', err?.message || err));
+};
 // --- CORE SERVICE FUNCTIONS ---
 /**
  * Creates a new lecture with smart conflict resolution for order, and atomically links it to the parent chapter.
@@ -22,7 +32,7 @@ const createLectureService = async (data, userId, userRole) => {
     try {
         const lecture = await (0, withTransaction_1.withTransaction)(async (session) => {
             // 1. SECURITY: Enforce course ownership (Uses shared utility)
-            await (0, ownership_1.validateCourseAndOwnership)(data.course, userId, userRole, session);
+            await (0, ownership_1.validateCourseAndOwnership)(data.course, userId, userRole);
             // 2. FETCH and VALIDATE CHAPTER
             const chapter = await chapter_model_1.default.findById(data.chapter).session(session);
             // Ensure chapter exists AND belongs to the course ID provided
@@ -51,21 +61,11 @@ const createLectureService = async (data, userId, userRole) => {
                 }
                 lecture = createdLectures[0];
             }
-            // 5. Link the lecture to the parent chapter (Transactional write)
-            chapter.content.push({
-                type: 'lecture',
-                refId: lecture._id,
-                title: lecture.title,
-                isPreview: lecture.isPreview || false
-            });
-            await chapter.save({ session });
-            // 6. Invalidate relevant caches (batch fire-and-forget)
-            Promise.all([
-                (0, cache_1.invalidateCache)(`${LECTURE_CACHE_BASE}:${lecture._id}`),
-                (0, cache_1.invalidateCache)(`${LECTURE_CACHE_BASE}:chapterId=${chapter._id}*`),
-                (0, cache_1.invalidateCache)(`chapter:${chapter._id}`),
-                (0, cache_1.invalidateCache)(`course:id=${data.course}`),
-            ]).catch(err => console.error('Cache invalidation failed (non-blocking):', err?.message || err));
+            // 5. Lecture is now stored in lectures collection - no need to update chapter content
+            // 6. Update chapter duration after lecture creation
+            await (0, chapter_service_1.updateChapterDuration)(data.chapter, session);
+            // 7. Invalidate relevant caches (non-blocking)
+            invalidateLectureCaches(lecture._id.toString(), chapter._id.toString(), data.course);
             return lecture;
         });
         return {
@@ -157,7 +157,7 @@ const updateLectureService = async (id, data, userId, userRole) => {
             if (!lecture)
                 throw (0, errorHandler_1.createError)("Lecture not found", 404);
             // 1. SECURITY: Enforce ownership
-            await (0, ownership_1.validateCourseAndOwnership)(lecture.course.toString(), userId, userRole, session);
+            await (0, ownership_1.validateCourseAndOwnership)(lecture.course.toString(), userId, userRole);
             // 2. Check if order is being changed
             const isOrderChange = data.order !== undefined && data.order !== lecture.order;
             if (isOrderChange) {
@@ -172,13 +172,8 @@ const updateLectureService = async (id, data, userId, userRole) => {
                 Object.assign(lecture, data);
             }
             await lecture.save({ session });
-            // 3. Invalidate caches (batch fire-and-forget)
-            Promise.all([
-                (0, cache_1.invalidateCache)(`${LECTURE_CACHE_BASE}:${lecture._id}`),
-                (0, cache_1.invalidateCache)(`${LECTURE_CACHE_BASE}:chapterId=${lecture.chapter}*`),
-                (0, cache_1.invalidateCache)(`chapter:${lecture.chapter}`),
-                (0, cache_1.invalidateCache)(`course:id=${lecture.course}`),
-            ]).catch(err => console.error('Cache invalidation failed (non-blocking):', err?.message || err));
+            // 3. Invalidate caches (non-blocking)
+            invalidateLectureCaches(lecture._id.toString(), lecture.chapter.toString(), lecture.course.toString());
             return lecture;
         });
         return {
@@ -206,16 +201,13 @@ const deleteLectureService = async (id, userId, userRole) => {
             if (!lecture)
                 throw (0, errorHandler_1.createError)("Lecture not found", 404);
             // 1. SECURITY: Enforce ownership
-            await (0, ownership_1.validateCourseAndOwnership)(lecture.course.toString(), userId, userRole, session);
+            await (0, ownership_1.validateCourseAndOwnership)(lecture.course.toString(), userId, userRole);
             // 2. Delete the lecture
             const deletedLecture = await lecture_model_1.default.findByIdAndDelete(id, { session });
-            // 3. Unlink from the parent chapter (Critical Integrity Step)
-            await chapter_model_1.default.findByIdAndUpdate(deletedLecture.chapter, { $pull: { lectures: deletedLecture._id } }, { session });
-            // 4. Invalidate caches
-            await (0, cache_1.invalidateCache)(`${LECTURE_CACHE_BASE}:${id}`);
-            await (0, cache_1.invalidateCache)(`${LECTURE_CACHE_BASE}:chapterId=${deletedLecture.chapter}*`);
-            await (0, cache_1.invalidateCache)(`chapter:${deletedLecture.chapter}`);
-            await (0, cache_1.invalidateCache)(`course:id=${lecture.course}`);
+            // 3. Update chapter duration after lecture deletion
+            await (0, chapter_service_1.updateChapterDuration)(lecture.chapter.toString(), session);
+            // 4. Invalidate caches (non-blocking)
+            invalidateLectureCaches(id, lecture.chapter.toString(), lecture.course.toString());
             return deletedLecture;
         });
         return {
@@ -243,7 +235,7 @@ const reorderLecturesService = async (chapterId, orderList, userId, userRole) =>
             if (!chapter)
                 throw (0, errorHandler_1.createError)("Chapter not found", 404);
             // SECURITY: Enforce ownership on the parent chapter
-            const course = await (0, ownership_1.validateCourseAndOwnership)(chapter.course.toString(), userId, userRole, session);
+            const course = await (0, ownership_1.validateCourseAndOwnership)(chapter.course.toString(), userId, userRole);
             // Convert lecture order list to the utility format
             const reorderRequests = orderList.map(item => ({
                 itemId: item.lectureId,
@@ -252,10 +244,8 @@ const reorderLecturesService = async (chapterId, orderList, userId, userRole) =>
             }));
             // Apply smart reorder logic using the utility
             const finalOrdering = await (0, chapterReorder_1.reorderChapterItemsWithConflictResolution)(chapterId, reorderRequests, session);
-            // Invalidate caches
-            await (0, cache_1.invalidateCache)(`${LECTURE_CACHE_BASE}:chapterId=${chapterId}*`);
-            await (0, cache_1.invalidateCache)(`chapter:${chapterId}`);
-            await (0, cache_1.invalidateCache)(`course:id=${course._id}`);
+            // Invalidate caches (non-blocking)
+            invalidateLectureCaches('', chapterId, course._id.toString());
             return {
                 success: true,
                 message: "Lectures reordered successfully",

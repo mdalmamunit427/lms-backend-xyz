@@ -4,7 +4,6 @@ const express_1 = require("express");
 const rbac_1 = require("../../config/rbac");
 const validate_middleware_1 = require("../../middlewares/validate.middleware");
 const cacheMiddleware_1 = require("../../middlewares/cacheMiddleware");
-const middlewareStacks_1 = require("../../utils/middlewareStacks");
 const auth_1 = require("../../middlewares/auth");
 const rbac_middleware_1 = require("../../middlewares/rbac.middleware");
 const coupon_validation_1 = require("./coupon.validation");
@@ -16,12 +15,12 @@ const COUPON_CACHE_BASE = 'coupon';
 router.post('/validate/:id', (0, validate_middleware_1.validate)(coupon_validation_1.validateCouponSchema), coupon_controller_1.validateCouponController);
 // --- Admin Protected Routes ---
 // Create a new coupon (Admin only)
-router.post('/', ...(0, middlewareStacks_1.getMutationStack)(rbac_1.permissions.coupon.create, coupon_validation_1.createCouponSchema), coupon_controller_1.createCouponController);
+router.post('/', auth_1.isAuthenticated, (0, rbac_middleware_1.rbac)(rbac_1.permissions.coupon.create), (0, validate_middleware_1.validate)(coupon_validation_1.createCouponSchema), coupon_controller_1.createCouponController);
 // Get all coupons (Admin only) - with caching
 router.get('/', auth_1.isAuthenticated, (0, rbac_middleware_1.rbac)(rbac_1.permissions.coupon.read), (0, cacheMiddleware_1.cacheMiddleware)('coupons:list', { isList: true }), coupon_controller_1.getAllCouponsController);
 // Update a coupon (Admin only)
-router.put('/:id', ...(0, middlewareStacks_1.getMutationStack)(rbac_1.permissions.coupon.update, coupon_validation_1.updateCouponSchema, coupon_validation_1.deleteCouponSchema), coupon_controller_1.updateCouponController);
+router.put('/:id', auth_1.isAuthenticated, (0, rbac_middleware_1.rbac)(rbac_1.permissions.coupon.update), (0, validate_middleware_1.validate)(coupon_validation_1.updateCouponSchema), coupon_controller_1.updateCouponController);
 // Delete a coupon (Admin only)
-router.delete('/:id', ...(0, middlewareStacks_1.getDeleteStack)(rbac_1.permissions.coupon.delete, coupon_validation_1.deleteCouponSchema), coupon_controller_1.deleteCouponController);
+router.delete('/:id', auth_1.isAuthenticated, (0, rbac_middleware_1.rbac)(rbac_1.permissions.coupon.delete), (0, validate_middleware_1.validate)(coupon_validation_1.deleteCouponSchema), coupon_controller_1.deleteCouponController);
 exports.default = router;
 //# sourceMappingURL=coupon.routes.js.map

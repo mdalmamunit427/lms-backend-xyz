@@ -20,6 +20,7 @@ export type IReorderItem = {
 };
 export type ILectureData = Omit<ILecture, "chapter" | "course" | "order">;
 export type UserRole = 'admin' | 'instructor' | 'student';
+export declare const updateChapterDuration: (chapterId: string, session?: any) => Promise<void>;
 export declare const createChapter: (data: ICreateChapterData, userId: string, userRole: UserRole) => Promise<ServiceResponse<IChapter>>;
 /**
  * Create Chapter with multiple Lectures (Transactional)

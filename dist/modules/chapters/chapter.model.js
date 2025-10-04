@@ -38,15 +38,6 @@ const ChapterSchema = new mongoose_1.Schema({
     title: { type: String, required: true, trim: true },
     course: { type: mongoose_1.Schema.Types.ObjectId, ref: "Course", required: true, index: true },
     order: { type: Number, required: true },
-    content: [
-        {
-            type: { type: String, enum: ["lecture", "quiz"], required: true },
-            refId: { type: mongoose_1.Schema.Types.ObjectId, required: true },
-            title: { type: String, required: true },
-            isPreview: { type: Boolean },
-            // videoUrl field is REMOVED for size optimization.
-        },
-    ],
     chapterDuration: { type: Number, default: 0 }
 }, { timestamps: true });
 // Compound index for course structure and ordering

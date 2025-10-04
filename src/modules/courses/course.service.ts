@@ -34,6 +34,23 @@ type CourseQueryOptions = {
   cacheKey?: string;
 };
 
+// Utility function to update course total duration (optimized - no extra DB calls)
+export const updateCourseDuration = async (courseId: string, newDuration?: number, session?: any): Promise<void> => {
+  const course = await Course.findById(courseId).session(session);
+  if (!course) return;
+
+  if (newDuration !== undefined) {
+    // Use provided duration (most efficient)
+    course.totalDuration = newDuration;
+  } else {
+    // Fallback: calculate from existing chapters (only when needed)
+    const chapters = await Chapter.find({ course: courseId }).select('chapterDuration').session(session);
+    course.totalDuration = chapters.reduce((total, chapter) => total + (chapter.chapterDuration || 0), 0);
+  }
+  
+  await course.save({ session });
+};
+
 // --- Service Functions ---
 
 

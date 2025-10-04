@@ -39,6 +39,7 @@ const discussionService = __importStar(require("./discussion.service"));
 const catchAsync_1 = require("../../middlewares/catchAsync");
 const common_1 = require("../../utils/common");
 const response_1 = require("../../utils/response");
+const cache_1 = require("../../utils/cache");
 // --- CONTROLLER HANDLERS ---
 exports.createDiscussionHandler = (0, catchAsync_1.catchAsync)(async (req, res) => {
     const userId = (0, common_1.getUserId)(req);
@@ -66,11 +67,12 @@ exports.answerDiscussionHandler = (0, catchAsync_1.catchAsync)(async (req, res) 
 });
 exports.updateDiscussionHandler = (0, catchAsync_1.catchAsync)(async (req, res) => {
     const userId = (0, common_1.getUserId)(req);
+    const userRole = (0, common_1.getUserRole)(req);
     if (!req.params.id) {
         return (0, response_1.sendError)(res, 'Discussion ID missing', 400);
     }
     const { question } = req.body;
-    const result = await discussionService.updateDiscussionService(req.params.id, userId, question);
+    const result = await discussionService.updateDiscussionService(req.params.id, userId, question, userRole);
     if (!result.success) {
         return (0, response_1.sendError)(res, result.message || 'Discussion update failed', 400, result.errors);
     }
@@ -78,10 +80,11 @@ exports.updateDiscussionHandler = (0, catchAsync_1.catchAsync)(async (req, res) 
 });
 exports.deleteDiscussionHandler = (0, catchAsync_1.catchAsync)(async (req, res) => {
     const userId = (0, common_1.getUserId)(req);
+    const userRole = (0, common_1.getUserRole)(req);
     if (!req.params.id) {
         return (0, response_1.sendError)(res, 'Discussion ID missing', 400);
     }
-    const result = await discussionService.deleteDiscussionService(req.params.id, userId);
+    const result = await discussionService.deleteDiscussionService(req.params.id, userId, userRole);
     if (!result.success) {
         return (0, response_1.sendError)(res, result.message || 'Discussion deletion failed', 400, result.errors);
     }
@@ -138,11 +141,15 @@ exports.getCourseDiscussionsHandler = (0, catchAsync_1.catchAsync)(async (req, r
 });
 exports.getUserDiscussionsHandler = (0, catchAsync_1.catchAsync)(async (req, res) => {
     const userId = (0, common_1.getUserId)(req);
-    const cacheKey = req.cacheKey;
-    if (!cacheKey) {
-        return (0, response_1.sendError)(res, 'Cache key missing from request', 500);
-    }
     const { page, limit } = (0, common_1.getPaginationParams)(req);
+    // Generate user-specific cache key
+    const cacheKey = `discussions:user:userId=${userId}:page=${page}:limit=${limit}`;
+    // Try to get from cache first
+    const cachedData = await (0, cache_1.getCacheWithTTL)(cacheKey);
+    if (cachedData && cachedData.data) {
+        const { discussions, pagination } = cachedData.data;
+        return (0, response_1.sendPaginated)(res, discussions, pagination, 'User discussions retrieved from cache', true);
+    }
     const options = {
         page,
         limit
@@ -152,6 +159,6 @@ exports.getUserDiscussionsHandler = (0, catchAsync_1.catchAsync)(async (req, res
         return (0, response_1.sendError)(res, result.message || 'Failed to retrieve user discussions', 500, result.errors);
     }
     const { discussions, pagination } = result.data;
-    return (0, response_1.sendPaginated)(res, discussions, pagination, 'User discussions retrieved successfully', !!cacheKey);
+    return (0, response_1.sendPaginated)(res, discussions, pagination, 'User discussions retrieved successfully', false);
 });
 //# sourceMappingURL=discussion.controller.js.map

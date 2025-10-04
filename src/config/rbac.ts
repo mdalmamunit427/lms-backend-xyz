@@ -125,7 +125,7 @@ export const rolePermissions = {
     ...Object.values(permissions.notification),
     ...Object.values(permissions.certificate),
   ],
-   admin: [
+  admin: [
     ...Object.values(permissions.course),
     ...Object.values(permissions.coupon),
     // Admin gets all user permissions, including general update/delete and role updates

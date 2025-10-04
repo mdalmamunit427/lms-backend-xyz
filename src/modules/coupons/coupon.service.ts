@@ -77,13 +77,9 @@ export const applyCoupon = async (couponId: string, courseId: string): Promise<S
     }
     
     let discountAmount = 0;
-    if (coupon.discountValue <= 100) {
-      // Percentage discount
-      discountAmount = (course.price * coupon.discountValue) / 100;
-    } else {
-      // Fixed amount discount
-      discountAmount = coupon.discountValue;
-    }
+    // For simplicity, treat discountValue as percentage (1-100)
+    // If you need fixed amount discounts, add a separate field like discountType: 'percentage' | 'fixed'
+    discountAmount = (course.price * coupon.discountValue) / 100;
     
     const finalPrice = Math.max(0, course.price - discountAmount);
     

@@ -30,6 +30,9 @@ export declare const reorderChapterItemsWithConflictResolution: (chapterId: stri
  *
  * @param chapterId - The chapter ID to update
  * @param session - MongoDB session for transaction support
+ *
+ * NOTE: This function is deprecated since we removed the content array from chapters.
+ * Content is now dynamically generated from lectures and quizzes collections.
  */
 export declare const updateChapterContentArray: (chapterId: string, session: any) => Promise<void>;
 /**

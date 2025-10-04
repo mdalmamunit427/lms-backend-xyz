@@ -40,6 +40,7 @@ const catchAsync_1 = require("../../middlewares/catchAsync");
 const pdfGenerator_1 = require("../../utils/pdfGenerator");
 const common_1 = require("../../utils/common");
 const response_1 = require("../../utils/response");
+const cache_1 = require("../../utils/cache");
 // --- CONTROLLER HANDLERS ---
 exports.getUserCertificateHandler = (0, catchAsync_1.catchAsync)(async (req, res) => {
     const userId = (0, common_1.getUserId)(req);
@@ -58,11 +59,15 @@ exports.getUserCertificateHandler = (0, catchAsync_1.catchAsync)(async (req, res
 });
 exports.getUserCertificatesHandler = (0, catchAsync_1.catchAsync)(async (req, res) => {
     const userId = (0, common_1.getUserId)(req);
-    const cacheKey = req.cacheKey;
-    if (!cacheKey) {
-        return (0, response_1.sendError)(res, 'Cache key missing from request', 500);
-    }
     const { page, limit } = (0, common_1.getPaginationParams)(req);
+    // Generate cache key manually for user-specific data
+    const cacheKey = `certificates:user:${userId}:page:${page}:limit:${limit}`;
+    // Try to get from cache first
+    const cachedData = await (0, cache_1.getCacheWithTTL)(cacheKey);
+    if (cachedData) {
+        const { certificates, pagination } = cachedData.data;
+        return (0, response_1.sendPaginated)(res, certificates, pagination, 'Certificates retrieved successfully', true);
+    }
     const options = {
         page,
         limit
@@ -72,7 +77,7 @@ exports.getUserCertificatesHandler = (0, catchAsync_1.catchAsync)(async (req, re
         return (0, response_1.sendError)(res, result.message || 'Failed to retrieve certificates', 500, result.errors);
     }
     const { data, pagination } = result.data;
-    return (0, response_1.sendPaginated)(res, data, pagination, 'Certificates retrieved successfully', !!cacheKey);
+    return (0, response_1.sendPaginated)(res, data, pagination, 'Certificates retrieved successfully', false);
 });
 exports.getCertificateByIdHandler = (0, catchAsync_1.catchAsync)(async (req, res) => {
     if (!req.params.certificateId) {

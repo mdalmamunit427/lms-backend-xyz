@@ -1,25 +1,26 @@
-// src/modules/users/user.routes.ts (FINAL OPTIMIZED VERSION)
-
-import express from 'express';
-import { getMutationStack, getPublicValidationStack } from '../../utils/middlewareStacks';
 import { activateUserSchema, forgotPasswordSchema, loginUserSchema, refreshTokenSchema, registerUserSchema, resetPasswordSchema, resetPasswordWithOtpSchema, socialAuthSchema, updateProfilePictureSchema, updateProfileSchema, updateUserRoleSchema } from './user.validation';
 import { activate, register, login, refresh, social, forgotPasswordController, resetPasswordWithOtpController, getUser, logout, updateProfile, resetPasswordController, updateProfilePicture, updateUserRole } from './user.controller';
 import { isAuthenticated } from '../../middlewares/auth';
 import { permissions } from '../../config/rbac';
 import { rbac } from '../../middlewares/rbac.middleware';
+import { validate } from "../../middlewares/validate.middleware";
+import { cacheMiddleware } from "../../middlewares/cacheMiddleware";
+// src/modules/users/user.routes.ts (FINAL OPTIMIZED VERSION)
+
+import express from 'express';
 
 
 const router = express.Router();
 
 // --- Unauthenticated Routes (Public Validation) ---
 
-router.post('/register', ...getPublicValidationStack(registerUserSchema), register);
-router.post('/activate-user', ...getPublicValidationStack(activateUserSchema), activate);
-router.post('/login', ...getPublicValidationStack(loginUserSchema), login);
-router.post('/refresh-token', ...getPublicValidationStack(refreshTokenSchema), refresh);
-router.post('/social-auth', ...getPublicValidationStack(socialAuthSchema), social);
-router.post("/forgot-password", ...getPublicValidationStack(forgotPasswordSchema), forgotPasswordController);
-router.post("/reset-password-otp", ...getPublicValidationStack(resetPasswordWithOtpSchema), resetPasswordWithOtpController);
+router.post('/register', validate(registerUserSchema), register);
+router.post('/activate-user', validate(activateUserSchema), activate);
+router.post('/login', validate(loginUserSchema), login);
+router.post('/refresh-token', validate(refreshTokenSchema), refresh);
+router.post('/social-auth', validate(socialAuthSchema), social);
+router.post("/forgot-password", validate(forgotPasswordSchema), forgotPasswordController);
+router.post("/reset-password-otp", validate(resetPasswordWithOtpSchema), resetPasswordWithOtpController);
 
 
 // --- Authenticated Routes (RBAC & Stacks) ---
@@ -35,21 +36,27 @@ router.get('/me', isAuthenticated, rbac(permissions.user.read), getUser);
 // the stack's explicit isAuthenticated is redundant but harmless.
 router.put(
   '/update-profile', 
-  ...getMutationStack(permissions.user.updateSelf, updateProfileSchema), 
+  isAuthenticated,
+    rbac(permissions.user.updateSelf),
+    validate(updateProfileSchema), 
   updateProfile
 );
 
 // Reset user password 
 router.put(
   '/reset-password', 
-  ...getMutationStack(permissions.user.resetPasswordSelf, resetPasswordSchema), 
+  isAuthenticated,
+    rbac(permissions.user.resetPasswordSelf),
+    validate(resetPasswordSchema), 
   resetPasswordController
 );
 
 // Update profile picture
 router.put(
   '/update-profile-picture', 
-  ...getMutationStack(permissions.user.updateSelf, updateProfilePictureSchema), 
+  isAuthenticated,
+    rbac(permissions.user.updateSelf),
+    validate(updateProfilePictureSchema), 
   updateProfilePicture
 );
 
@@ -58,7 +65,9 @@ router.put(
 // Update user role (Admin only)
 router.put(
   '/:id/role', 
-  ...getMutationStack(permissions.user.updateRole, updateUserRoleSchema), 
+  isAuthenticated,
+    rbac(permissions.user.updateRole),
+    validate(updateUserRoleSchema), 
   updateUserRole
 );
 

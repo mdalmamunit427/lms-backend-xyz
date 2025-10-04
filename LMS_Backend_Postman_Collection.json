@@ -1,0 +1,552 @@
+{
+  "info": {
+    "name": "LMS Backend API",
+    "description": "Complete test collection for LMS Backend API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "jwtToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "courseId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "chapterId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "lectureId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/user/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["user", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.accessToken) {",
+                  "        pm.collectionVariables.set('jwtToken', response.data.accessToken);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/user/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["user", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Courses",
+      "item": [
+        {
+          "name": "Create Course",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data._id) {",
+                  "        pm.collectionVariables.set('courseId', response.data._id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Complete React Development Course\",\n  \"description\": \"Learn React from beginner to advanced level with real-world projects and best practices. This comprehensive course covers everything you need to know about React development.\",\n  \"category\": \"Web Development\",\n  \"price\": 99.99,\n  \"discount\": 20,\n  \"thumbnail\": \"https://images.unsplash.com/photo-1633356122544-f134324a6cee?w=1280\",\n  \"stacks\": [\"React\", \"JavaScript\", \"HTML\", \"CSS\"],\n  \"level\": \"beginner\",\n  \"requirements\": [\n    \"Basic knowledge of HTML and CSS\",\n    \"Familiarity with JavaScript fundamentals\",\n    \"Code editor (VS Code recommended)\"\n  ],\n  \"whatYouWillLearn\": [\n    \"React fundamentals and core concepts\",\n    \"Component lifecycle and state management\",\n    \"React Hooks (useState, useEffect, useContext)\",\n    \"Routing with React Router\",\n    \"State management with Redux\",\n    \"Testing React applications\",\n    \"Deployment strategies\"\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/courses/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["courses", "create"]
+            }
+          }
+        },
+        {
+          "name": "Get All Courses",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/courses?page=1&limit=10&category=Web Development",
+              "host": ["{{baseUrl}}"],
+              "path": ["courses"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "category",
+                  "value": "Web Development"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Featured Courses",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/courses/featured",
+              "host": ["{{baseUrl}}"],
+              "path": ["courses", "featured"]
+            }
+          }
+        },
+        {
+          "name": "Get Single Course",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/courses/{{courseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["courses", "{{courseId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Course",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Complete React Development Course - Updated\",\n  \"description\": \"Updated description with more details about the course content and learning outcomes.\",\n  \"price\": 89.99,\n  \"discount\": 25,\n  \"status\": \"published\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/courses/{{courseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["courses", "{{courseId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chapters",
+      "item": [
+        {
+          "name": "Create Chapter",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data._id) {",
+                  "        pm.collectionVariables.set('chapterId', response.data._id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Introduction to React\",\n  \"course\": \"{{courseId}}\",\n  \"order\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/chapters",
+              "host": ["{{baseUrl}}"],
+              "path": ["chapters"]
+            }
+          }
+        },
+        {
+          "name": "Create Chapter with Lectures",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.chapter && response.data.chapter._id) {",
+                  "        pm.collectionVariables.set('chapterId', response.data.chapter._id);",
+                  "    }",
+                  "    if (response.data && response.data.lectures && response.data.lectures[0]) {",
+                  "        pm.collectionVariables.set('lectureId', response.data.lectures[0]._id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chapter\": {\n    \"title\": \"React Components and JSX\",\n    \"course\": \"{{courseId}}\",\n    \"order\": 2\n  },\n  \"lectures\": [\n    {\n      \"title\": \"Understanding JSX\",\n      \"videoUrl\": \"https://example.com/video1.mp4\",\n      \"duration\": 1200,\n      \"isPreview\": true,\n      \"resources\": \"https://example.com/resources1.pdf\"\n    },\n    {\n      \"title\": \"Creating Your First Component\",\n      \"videoUrl\": \"https://example.com/video2.mp4\",\n      \"duration\": 1800,\n      \"isPreview\": false,\n      \"resources\": \"https://example.com/resources2.pdf\"\n    },\n    {\n      \"title\": \"Props and State\",\n      \"videoUrl\": \"https://example.com/video3.mp4\",\n      \"duration\": 2100,\n      \"isPreview\": true\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/chapters/with-lectures",
+              "host": ["{{baseUrl}}"],
+              "path": ["chapters", "with-lectures"]
+            }
+          }
+        },
+        {
+          "name": "Get Chapters by Course",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chapters/course/{{courseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["chapters", "course", "{{courseId}}"]
+            }
+          }
+        },
+        {
+          "name": "Get Single Chapter",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chapters/{{chapterId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["chapters", "{{chapterId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Chapter",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Advanced React Components\",\n  \"order\": 3\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/chapters/{{chapterId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["chapters", "{{chapterId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Lectures",
+      "item": [
+        {
+          "name": "Create Lecture",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data._id) {",
+                  "        pm.collectionVariables.set('lectureId', response.data._id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"React Hooks Deep Dive\",\n  \"course\": \"{{courseId}}\",\n  \"chapter\": \"{{chapterId}}\",\n  \"videoUrl\": \"https://example.com/hooks-video.mp4\",\n  \"duration\": 2400,\n  \"isPreview\": true,\n  \"resources\": \"https://example.com/hooks-resources.pdf\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/lectures",
+              "host": ["{{baseUrl}}"],
+              "path": ["lectures"]
+            }
+          }
+        },
+        {
+          "name": "Update Lecture",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"React Hooks Deep Dive - Updated\",\n  \"duration\": 2600,\n  \"isPreview\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/lectures/{{lectureId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["lectures", "{{lectureId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reviews",
+      "item": [
+        {
+          "name": "Create Review",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"course\": \"{{courseId}}\",\n  \"rating\": 5,\n  \"comment\": \"Excellent course! Very well structured and easy to follow. The instructor explains concepts clearly and provides great examples.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/reviews",
+              "host": ["{{baseUrl}}"],
+              "path": ["reviews"]
+            }
+          }
+        },
+        {
+          "name": "Get Course Reviews",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reviews/course/{{courseId}}?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["reviews", "course", "{{courseId}}"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Progress",
+      "item": [
+        {
+          "name": "Update Lecture Progress",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"progress\": 100,\n  \"timeSpent\": 2400,\n  \"completedAt\": \"2024-01-15T10:30:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/progress/lecture/{{lectureId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["progress", "lecture", "{{lectureId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Discussions",
+      "item": [
+        {
+          "name": "Create Discussion",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lecture\": \"{{lectureId}}\",\n  \"title\": \"Question about React Hooks\",\n  \"content\": \"I'm having trouble understanding the useEffect dependency array. Can someone explain when to include variables in it?\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/discussions",
+              "host": ["{{baseUrl}}"],
+              "path": ["discussions"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

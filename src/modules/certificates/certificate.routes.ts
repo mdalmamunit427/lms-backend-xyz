@@ -1,6 +1,10 @@
 // src/modules/certificates/certificate.routes.ts
 
 import { Router } from "express";
+import { isAuthenticated } from "../../middlewares/auth";
+import { rbac } from "../../middlewares/rbac.middleware";
+import { validate } from "../../middlewares/validate.middleware";
+import { cacheMiddleware } from "../../middlewares/cacheMiddleware";
 import {
   getUserCertificateHandler,
   getUserCertificatesHandler,
@@ -16,7 +20,6 @@ import {
   verifyCertificateSchema,
   getCertificateStatsSchema,
 } from "./certificate.validation";
-import { getCacheStack } from "../../utils/middlewareStacks";
 
 const router = Router();
 const CERTIFICATE_CACHE_BASE = 'certificates';
@@ -26,35 +29,49 @@ const CERTIFICATE_CACHE_BASE = 'certificates';
 // GET user's certificate for specific course
 router.get(
     "/course/:courseId", 
-    ...getCacheStack(`${CERTIFICATE_CACHE_BASE}:courseId`, { param: 'courseId' }, getCertificateSchema),
+    isAuthenticated,
+    rbac('certificate:read'),
+    cacheMiddleware(`${CERTIFICATE_CACHE_BASE}:courseId`, { param: 'courseId' }),
+    validate(getCertificateSchema),
     getUserCertificateHandler
 );
 
 // GET all user certificates (authenticated user)
 router.get(
     "/", 
-    ...getCacheStack(`${CERTIFICATE_CACHE_BASE}:user`, { param: 'user', isList: true }, getUserCertificatesSchema),
+    isAuthenticated,
+    rbac('certificate:read'),
+    validate(getUserCertificatesSchema),
     getUserCertificatesHandler
 );
 
 // GET certificate by certificate ID (public route for verification)
 router.get(
     "/view/:certificateId", 
-    ...getCacheStack(`${CERTIFICATE_CACHE_BASE}:id`, { param: 'certificateId' }, getCertificateByIdSchema),
+    isAuthenticated,
+    rbac('certificate:read'),
+    cacheMiddleware(`${CERTIFICATE_CACHE_BASE}:id`, { param: 'certificateId' }),
+    validate(getCertificateByIdSchema),
     getCertificateByIdHandler
 );
 
 // GET certificate verification (public route)
 router.get(
     "/verify/:certificateId", 
-    ...getCacheStack(`certificate-verify:id`, { param: 'certificateId' }, verifyCertificateSchema),
+    isAuthenticated,
+    rbac('certificate:verify'),
+    cacheMiddleware(`certificate-verify:id`, { param: 'certificateId' }),
+    validate(verifyCertificateSchema),
     verifyCertificateHandler
 );
 
 // GET certificate statistics (admin only)
 router.get(
     "/stats", 
-    ...getCacheStack(`certificate-stats`, { isList: true }, getCertificateStatsSchema),
+    isAuthenticated,
+    rbac('certificate:stats'),
+    cacheMiddleware(`certificate-stats`, { isList: true }),
+    validate(getCertificateStatsSchema),
     getCertificateStatsHandler
 );
 

@@ -20,6 +20,6 @@ const ReviewSchema: Schema = new Schema(
 ReviewSchema.index({ course: 1 });
 ReviewSchema.index({ user: 1 });
 
- const ReviewModel = mongoose.model<IReview>('Review', ReviewSchema);
+const ReviewModel = mongoose.model<IReview>('Review', ReviewSchema);
 
- export default ReviewModel;
+export default ReviewModel;

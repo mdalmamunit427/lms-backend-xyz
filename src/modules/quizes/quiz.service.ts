@@ -56,7 +56,7 @@ export const createQuizService = async (data: ICreateQuizBody, userId: string, u
             }
 
             // 2. SECURITY: Enforce course ownership
-            await validateCourseAndOwnership(courseId, userId, userRole, session);
+            await validateCourseAndOwnership(courseId, userId, userRole);
 
             // 3. Validate chapter belongs to course
             const chapter = await validateChapterBelongsToCourse(chapterId, courseId, session);
@@ -96,8 +96,6 @@ export const createQuizService = async (data: ICreateQuizBody, userId: string, u
 
             // 8. Invalidate caches
             await invalidateCache(`${QUIZ_CACHE_BASE}:${quiz._id}`);
-            await invalidateCache(`${QUIZ_CACHE_BASE}:chapterId=${chapter._id}`);
-            await invalidateCache(`${QUIZ_CACHE_BASE}:courseId=${courseId}`);
             await invalidateCache(`chapter:${chapter._id}`);
             await invalidateCache(`course:id=${courseId}`);
 
@@ -128,7 +126,7 @@ export const updateQuizService = async (id: string, data: IUpdateQuizBody, userI
             if (!quiz) throw new AppError("Quiz not found", 404);
 
             // 1. SECURITY: Enforce ownership
-            await validateCourseAndOwnership(quiz.course.toString(), userId, userRole, session);
+            await validateCourseAndOwnership(quiz.course.toString(), userId, userRole);
 
             // 2. Check if order is being changed
             const isOrderChange = data.order !== undefined && data.order !== quiz.order;
@@ -163,8 +161,6 @@ export const updateQuizService = async (id: string, data: IUpdateQuizBody, userI
             // 4. Invalidate caches (batch, non-blocking)
             Promise.all([
               invalidateCache(`${QUIZ_CACHE_BASE}:${quiz._id}`),
-              invalidateCache(`${QUIZ_CACHE_BASE}:chapterId=${quiz.chapter}`),
-              invalidateCache(`${QUIZ_CACHE_BASE}:courseId=${quiz.course}`),
               invalidateCache(`chapter:${quiz.chapter}`),
             ]).catch(err => console.error('Cache invalidation failed (non-blocking):', err?.message || err));
             await invalidateCache(`course:id=${quiz.course}`);
@@ -196,7 +192,7 @@ export const deleteQuizService = async (id: string, userId: string, userRole: Us
             if (!quiz) throw new AppError("Quiz not found", 404);
 
             // 1. SECURITY: Enforce ownership
-            await validateCourseAndOwnership(quiz.course.toString(), userId, userRole, session);
+            await validateCourseAndOwnership(quiz.course.toString(), userId, userRole);
 
             // 2. Remove from chapter content
             await Chapter.updateOne(
@@ -211,8 +207,6 @@ export const deleteQuizService = async (id: string, userId: string, userRole: Us
             // 4. Invalidate caches
             if (deletedQuiz) {
               await invalidateCache(`${QUIZ_CACHE_BASE}:${id}`);
-              await invalidateCache(`${QUIZ_CACHE_BASE}:chapterId=${deletedQuiz.chapter}`);
-              await invalidateCache(`${QUIZ_CACHE_BASE}:courseId=${deletedQuiz.course}`);
               await invalidateCache(`chapter:${deletedQuiz.chapter}`);
               await invalidateCache(`course:id=${deletedQuiz.course}`);
             }
@@ -237,7 +231,7 @@ export const deleteQuizService = async (id: string, userId: string, userRole: Us
 /**
  * Get quiz by ID with security filtering
  */
-export const getQuizByIdService = async (id: string, cacheKey: string, isEnrolled: boolean): Promise<ServiceResponse<any>> => {
+export const getQuizByIdService = async (id: string, cacheKey: string, userId: string, userRole: string): Promise<ServiceResponse<any>> => {
     try {
         const quiz = await Quiz.findById(id)
             .populate('course', 'title')
@@ -252,14 +246,25 @@ export const getQuizByIdService = async (id: string, cacheKey: string, isEnrolle
             };
         }
 
-        // SECURITY: Hide correct answers if not enrolled or instructor/admin
+        // Check enrollment status
+        let isEnrolled = false;
+        if (userRole === 'admin' || userRole === 'instructor') {
+            isEnrolled = true;
+        } else if (userRole === 'student') {
+            const enrollment = await Enrollment.findOne({ 
+                student: userId, 
+                course: quiz.course 
+            });
+            isEnrolled = !!enrollment;
+        }
+
+        // SECURITY: Block complete access if not enrolled
         if (!isEnrolled) {
-            quiz.questions = quiz.questions.map(q => ({
-                questionText: q.questionText,
-                options: q.options,
-                correctAnswer: -1, // Hide correct answer
-                explanation: undefined // Hide explanation
-            }));
+            return {
+                success: false,
+                message: 'Access denied',
+                errors: ['You must be enrolled in this course to access quiz content']
+            };
         }
 
         const responseData = { quiz, cached: false };
@@ -279,80 +284,6 @@ export const getQuizByIdService = async (id: string, cacheKey: string, isEnrolle
     }
 };
 
-/**
- * Get quizzes by chapter
- */
-export const getQuizzesByChapterService = async (chapterId: string, cacheKey: string, isEnrolled: boolean): Promise<ServiceResponse<any>> => {
-    try {
-        const quizzes = await Quiz.find({ chapter: chapterId }).sort({ order: 1 }).lean();
-
-        // SECURITY: Hide answers for non-enrolled users
-        if (!isEnrolled) {
-            quizzes.forEach(quiz => {
-                quiz.questions = quiz.questions.map(q => ({
-                    questionText: q.questionText,
-                    options: q.options,
-                    correctAnswer: -1,
-                    explanation: undefined
-                }));
-            });
-        }
-
-        const responseData = { quizzes, cached: false };
-        await setCache(cacheKey, responseData);
-        
-        return {
-            success: true,
-            data: responseData,
-            message: 'Quizzes retrieved successfully'
-        };
-    } catch (error: any) {
-        return {
-            success: false,
-            message: 'Failed to retrieve quizzes',
-            errors: [error.message]
-        };
-    }
-};
-
-/**
- * Get quizzes by course
- */
-export const getCourseQuizzesService = async (courseId: string, cacheKey: string, isEnrolled: boolean): Promise<ServiceResponse<any>> => {
-    try {
-        const quizzes = await Quiz.find({ course: courseId })
-            .populate('chapter', 'title order')
-            .sort({ order: 1 })
-            .lean();
-
-        // SECURITY: Hide answers for non-enrolled users
-        if (!isEnrolled) {
-            quizzes.forEach(quiz => {
-                quiz.questions = quiz.questions.map(q => ({
-                    questionText: q.questionText,
-                    options: q.options,
-                    correctAnswer: -1,
-                    explanation: undefined
-                }));
-            });
-        }
-
-        const responseData = { quizzes, cached: false };
-        await setCache(cacheKey, responseData);
-        
-        return {
-            success: true,
-            data: responseData,
-            message: 'Course quizzes retrieved successfully'
-        };
-    } catch (error: any) {
-        return {
-            success: false,
-            message: 'Failed to retrieve course quizzes',
-            errors: [error.message]
-        };
-    }
-};
 
 /**
  * Submit quiz attempt
@@ -478,6 +409,20 @@ export const submitQuizAttemptService = async (userId: string, quizId: string, d
  */
 export const getQuizResultsService = async (userId: string, courseId: string): Promise<ServiceResponse<any>> => {
     try {
+        // Check if user is enrolled in the course
+        const enrollment = await Enrollment.findOne({ 
+            student: userId, 
+            course: courseId 
+        });
+        
+        if (!enrollment) {
+            return {
+                success: false,
+                message: 'Not enrolled in this course',
+                errors: ['You must be enrolled in the course to view quiz results']
+            };
+        }
+
         const quizzes = await Quiz.find({ course: courseId }).sort({ order: 1 });
         const courseProgress = await CourseProgress.findOne({ user: userId, course: courseId });
 

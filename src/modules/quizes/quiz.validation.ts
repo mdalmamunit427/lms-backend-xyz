@@ -63,19 +63,6 @@ export const quizIdSchema = z.object({
   }),
 });
 
-// Chapter ID Schema for listing quizzes
-export const getChapterQuizzesSchema = z.object({
-  params: z.object({
-    chapterId: objectIdSchema.describe("Chapter ID is required"),
-  }),
-});
-
-// Course ID Schema for listing quizzes
-export const getCourseQuizzesSchema = z.object({
-  params: z.object({
-    courseId: objectIdSchema.describe("Course ID is required"),
-  }),
-});
 
 // Submit Quiz Attempt Schema
 export const submitQuizAttemptSchema = z.object({

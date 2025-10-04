@@ -9,6 +9,7 @@ import { catchAsync } from "../../middlewares/catchAsync";
 import { getUserId, getUserRole, getPaginationParams } from "../../utils/common";
 import { sendSuccess, sendCreated, sendError, sendPaginated } from "../../utils/response";
 import { AuthRequest } from "../../middlewares/auth";
+import { getCacheWithTTL } from "../../utils/cache";
 
 // --- Type Definitions ---
 interface ReviewAuthRequest extends AuthRequest {
@@ -132,13 +133,19 @@ export const getCourseReviewsHandler = catchAsync(async (req: ReviewAuthRequest,
 
 export const getUserReviewsHandler = catchAsync(async (req: ReviewAuthRequest, res: Response) => {
     const userId = getUserId(req);
-
-    const cacheKey = req.cacheKey;
-    if (!cacheKey) {
-        return sendError(res, 'Cache key missing from request', 500);
+    const { page, limit } = getPaginationParams(req);
+    
+    // Generate user-specific cache key
+    const cacheKey = `reviews:user:userId=${userId}:page=${page}:limit=${limit}`;
+    
+    // Try to get from cache first
+    const cachedData = await getCacheWithTTL(cacheKey);
+    
+    if (cachedData && cachedData.data) {
+        const { data, pagination } = cachedData.data;
+        return sendPaginated(res, data, pagination, 'User reviews retrieved from cache', true);
     }
 
-    const { page, limit } = getPaginationParams(req);
     const options = {
         page,
         limit
@@ -155,7 +162,7 @@ export const getUserReviewsHandler = catchAsync(async (req: ReviewAuthRequest, r
     }
     
     const { data, pagination } = result.data!;
-    return sendPaginated(res, data, pagination, 'User reviews retrieved successfully', !!cacheKey);
+    return sendPaginated(res, data, pagination, 'User reviews retrieved successfully', false);
 });
 
 export const getCourseReviewStatsHandler = catchAsync(async (req: ReviewAuthRequest, res: Response) => {

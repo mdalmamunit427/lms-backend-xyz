@@ -39,6 +39,7 @@ const reviewService = __importStar(require("./review.service"));
 const catchAsync_1 = require("../../middlewares/catchAsync");
 const common_1 = require("../../utils/common");
 const response_1 = require("../../utils/response");
+const cache_1 = require("../../utils/cache");
 // --- CONTROLLER HANDLERS ---
 exports.createReviewHandler = (0, catchAsync_1.catchAsync)(async (req, res) => {
     const userId = (0, common_1.getUserId)(req);
@@ -106,11 +107,15 @@ exports.getCourseReviewsHandler = (0, catchAsync_1.catchAsync)(async (req, res) 
 });
 exports.getUserReviewsHandler = (0, catchAsync_1.catchAsync)(async (req, res) => {
     const userId = (0, common_1.getUserId)(req);
-    const cacheKey = req.cacheKey;
-    if (!cacheKey) {
-        return (0, response_1.sendError)(res, 'Cache key missing from request', 500);
-    }
     const { page, limit } = (0, common_1.getPaginationParams)(req);
+    // Generate user-specific cache key
+    const cacheKey = `reviews:user:userId=${userId}:page=${page}:limit=${limit}`;
+    // Try to get from cache first
+    const cachedData = await (0, cache_1.getCacheWithTTL)(cacheKey);
+    if (cachedData && cachedData.data) {
+        const { data, pagination } = cachedData.data;
+        return (0, response_1.sendPaginated)(res, data, pagination, 'User reviews retrieved from cache', true);
+    }
     const options = {
         page,
         limit
@@ -120,7 +125,7 @@ exports.getUserReviewsHandler = (0, catchAsync_1.catchAsync)(async (req, res) =>
         return (0, response_1.sendError)(res, result.message || 'Failed to retrieve user reviews', 500, result.errors);
     }
     const { data, pagination } = result.data;
-    return (0, response_1.sendPaginated)(res, data, pagination, 'User reviews retrieved successfully', !!cacheKey);
+    return (0, response_1.sendPaginated)(res, data, pagination, 'User reviews retrieved successfully', false);
 });
 exports.getCourseReviewStatsHandler = (0, catchAsync_1.catchAsync)(async (req, res) => {
     const cacheKey = req.cacheKey;

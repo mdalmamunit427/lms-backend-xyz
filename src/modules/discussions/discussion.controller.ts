@@ -9,6 +9,7 @@ import { catchAsync } from "../../middlewares/catchAsync";
 import { getUserId, getUserRole, getPaginationParams } from "../../utils/common";
 import { sendSuccess, sendCreated, sendError, sendPaginated } from "../../utils/response";
 import { AuthRequest } from "../../middlewares/auth";
+import { getCacheWithTTL } from "../../utils/cache";
 
 // --- Type Definitions ---
 interface DiscussionAuthRequest extends AuthRequest {
@@ -74,6 +75,7 @@ export const answerDiscussionHandler = catchAsync(async (req: DiscussionAuthRequ
 
 export const updateDiscussionHandler = catchAsync(async (req: DiscussionAuthRequest, res: Response) => {
     const userId = getUserId(req);
+    const userRole = getUserRole(req);
     
     if (!req.params.id) {
         return sendError(res, 'Discussion ID missing', 400);
@@ -83,7 +85,8 @@ export const updateDiscussionHandler = catchAsync(async (req: DiscussionAuthRequ
     const result = await discussionService.updateDiscussionService(
         req.params.id, 
         userId, 
-        question
+        question,
+        userRole
     );
     
     if (!result.success) {
@@ -95,12 +98,13 @@ export const updateDiscussionHandler = catchAsync(async (req: DiscussionAuthRequ
 
 export const deleteDiscussionHandler = catchAsync(async (req: DiscussionAuthRequest, res: Response) => {
     const userId = getUserId(req);
+    const userRole = getUserRole(req);
     
     if (!req.params.id) {
         return sendError(res, 'Discussion ID missing', 400);
     }
 
-    const result = await discussionService.deleteDiscussionService(req.params.id, userId);
+    const result = await discussionService.deleteDiscussionService(req.params.id, userId, userRole);
     
     if (!result.success) {
         return sendError(res, result.message || 'Discussion deletion failed', 400, result.errors);
@@ -184,13 +188,19 @@ export const getCourseDiscussionsHandler = catchAsync(async (req: DiscussionAuth
 
 export const getUserDiscussionsHandler = catchAsync(async (req: DiscussionAuthRequest, res: Response) => {
     const userId = getUserId(req);
-
-    const cacheKey = req.cacheKey;
-    if (!cacheKey) {
-        return sendError(res, 'Cache key missing from request', 500);
+    const { page, limit } = getPaginationParams(req);
+    
+    // Generate user-specific cache key
+    const cacheKey = `discussions:user:userId=${userId}:page=${page}:limit=${limit}`;
+    
+    // Try to get from cache first
+    const cachedData = await getCacheWithTTL(cacheKey);
+    
+    if (cachedData && cachedData.data) {
+        const { discussions, pagination } = cachedData.data;
+        return sendPaginated(res, discussions, pagination, 'User discussions retrieved from cache', true);
     }
 
-    const { page, limit } = getPaginationParams(req);
     const options = {
         page,
         limit
@@ -207,5 +217,5 @@ export const getUserDiscussionsHandler = catchAsync(async (req: DiscussionAuthRe
     }
     
     const { discussions, pagination } = result.data!;
-    return sendPaginated(res, discussions, pagination, 'User discussions retrieved successfully', !!cacheKey);
+    return sendPaginated(res, discussions, pagination, 'User discussions retrieved successfully', false);
 });

@@ -1,6 +1,10 @@
 // src/modules/notifications/notification.routes.ts
 
 import { Router } from "express";
+import { isAuthenticated } from "../../middlewares/auth";
+import { rbac } from "../../middlewares/rbac.middleware";
+import { validate } from "../../middlewares/validate.middleware";
+import { cacheMiddleware } from "../../middlewares/cacheMiddleware";
 import {
   createNotificationHandler,
   deleteNotificationHandler,
@@ -20,7 +24,6 @@ import {
   sendBulkNotificationSchema,
   getNotificationStatsSchema,
 } from "./notification.validation";
-import { getCacheStack, getDeleteStack, getMutationStack } from "../../utils/middlewareStacks";
 import {
   getEnhancedNotificationsSchema,
   notificationAnalyticsSchema,
@@ -38,83 +41,107 @@ const NOTIFICATION_CACHE_BASE = 'notifications';
 // POST create notification (admin only)
 router.post(
   "/", 
-  ...getMutationStack('notification:create', createNotificationSchema), 
+  isAuthenticated,
+    rbac('notification:create'),
+    validate(createNotificationSchema), 
   createNotificationHandler
 );
 
 // POST send bulk notifications (admin only)
 router.post(
   "/bulk", 
-  ...getMutationStack('notification:create', sendBulkNotificationSchema), 
+  isAuthenticated,
+    rbac('notification:create'),
+    validate(sendBulkNotificationSchema), 
   sendBulkNotificationHandler
 );
 
 // GET user's notifications with advanced filtering
 router.get(
   "/", 
-  ...getCacheStack(`${NOTIFICATION_CACHE_BASE}:user`, { param: 'user', isList: true }, getEnhancedNotificationsSchema),
+  isAuthenticated,
+    cacheMiddleware(`${NOTIFICATION_CACHE_BASE}:user`, { param: 'user', isList: true }),
+    validate(getEnhancedNotificationsSchema),
   getEnhancedNotificationsHandler
 );
 
 // GET unread count
 router.get(
   "/unread/count", 
-  ...getCacheStack(`${NOTIFICATION_CACHE_BASE}:unread`, { param: 'user' }, getEnhancedNotificationsSchema),
+  isAuthenticated,
+    cacheMiddleware(`${NOTIFICATION_CACHE_BASE}:unread`, { param: 'user' }),
+    validate(getEnhancedNotificationsSchema),
   getUnreadCountHandler
 );
 
 // GET notification statistics (admin only)
 router.get(
   "/stats", 
-  ...getCacheStack(`notification-stats`, { isList: true }, getNotificationStatsSchema),
+  isAuthenticated,
+    cacheMiddleware(`notification-stats`, { isList: true }),
+    validate(getNotificationStatsSchema),
   getNotificationStatsHandler
 );
 
 // GET notification analytics
 router.get(
   "/analytics",
-  ...getCacheStack('notification:read', { isList: false }, notificationAnalyticsSchema),
+  isAuthenticated,
+    cacheMiddleware('notification:read', { isList: false }),
+    validate(notificationAnalyticsSchema),
   getNotificationAnalyticsHandler
 );
 
 router.get(
   "/analytics/:userId",
-  ...getCacheStack('notification:read', { param: 'userId', isList: false }, notificationAnalyticsSchema),
+  isAuthenticated,
+    cacheMiddleware('notification:read', { param: 'userId' }),
+    validate(notificationAnalyticsSchema),
   getNotificationAnalyticsHandler
 );
 
 // GET notification preferences
 router.get(
   "/preferences",
-  ...getCacheStack('notification:read', { isList: false }, emptySchema),
+  isAuthenticated,
+    cacheMiddleware('notification:read', { isList: false }),
+    validate(emptySchema),
   getNotificationPreferencesHandler
 );
 
 // PATCH update notification preferences
 router.patch(
   "/preferences",
-  ...getMutationStack('notification:update', notificationPreferencesSchema),
+  isAuthenticated,
+    rbac('notification:update'),
+    validate(notificationPreferencesSchema),
   updateNotificationPreferencesHandler
 );
 
 // PATCH mark notifications as read (enhanced)
 router.patch(
   "/read",
-  ...getMutationStack('notification:update', markNotificationsAsReadSchema),
+  isAuthenticated,
+    rbac('notification:update'),
+    validate(markNotificationsAsReadSchema),
   markNotificationsAsReadEnhancedHandler
 );
 
 // PATCH archive notifications
 router.patch(
   "/archive",
-  ...getMutationStack('notification:update', archiveNotificationsSchema),
+  isAuthenticated,
+    rbac('notification:update'),
+    validate(archiveNotificationsSchema),
   archiveNotificationsHandler
 );
 
 // DELETE notification
 router.delete(
   "/:id", 
-  ...getDeleteStack('notification:delete', notificationIdSchema),
+  isAuthenticated,
+    rbac('notification:delete'),
+    validate(notificationIdSchema),
   deleteNotificationHandler
 );
 

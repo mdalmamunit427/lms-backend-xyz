@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getCourseStats = exports.getCoursesByInstructor = exports.getFeaturedCourses = exports.getCourseAnalytics = exports.getRecommendedCourses = exports.searchCourses = exports.getCourseDetails = exports.checkEnrollmentStatus = exports.getAllCoursesService = exports.deleteCourse = exports.updateCourse = exports.createCourse = void 0;
+exports.getCourseStats = exports.getCoursesByInstructor = exports.getFeaturedCourses = exports.getCourseAnalytics = exports.getRecommendedCourses = exports.searchCourses = exports.getCourseDetails = exports.checkEnrollmentStatus = exports.getAllCoursesService = exports.deleteCourse = exports.updateCourse = exports.createCourse = exports.updateCourseDuration = void 0;
 const mongoose_1 = require("mongoose");
 const cloudinary_1 = __importDefault(require("cloudinary"));
 const withTransaction_1 = require("../../utils/withTransaction");
@@ -18,6 +18,23 @@ const chapter_model_1 = __importDefault(require("../chapters/chapter.model"));
 const course_model_1 = __importDefault(require("./course.model"));
 const review_model_1 = __importDefault(require("../reviews/review.model"));
 const progress_model_1 = __importDefault(require("../progress/progress.model"));
+// Utility function to update course total duration (optimized - no extra DB calls)
+const updateCourseDuration = async (courseId, newDuration, session) => {
+    const course = await course_model_1.default.findById(courseId).session(session);
+    if (!course)
+        return;
+    if (newDuration !== undefined) {
+        // Use provided duration (most efficient)
+        course.totalDuration = newDuration;
+    }
+    else {
+        // Fallback: calculate from existing chapters (only when needed)
+        const chapters = await chapter_model_1.default.find({ course: courseId }).select('chapterDuration').session(session);
+        course.totalDuration = chapters.reduce((total, chapter) => total + (chapter.chapterDuration || 0), 0);
+    }
+    await course.save({ session });
+};
+exports.updateCourseDuration = updateCourseDuration;
 // --- Service Functions ---
 // Function to create a new course
 const createCourse = async (courseData, instructorId) => {

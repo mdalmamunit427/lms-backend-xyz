@@ -11,6 +11,7 @@ const cache_1 = require("../../utils/cache");
 const discussion_model_1 = __importDefault(require("./discussion.model"));
 const lecture_model_1 = __importDefault(require("../lectures/lecture.model"));
 const course_model_1 = __importDefault(require("../courses/course.model"));
+const enrollment_model_1 = __importDefault(require("../enrollments/enrollment.model"));
 const notification_service_1 = require("../notifications/notification.service");
 const DISCUSSION_CACHE_BASE = 'discussions';
 // --- CORE SERVICE FUNCTIONS ---
@@ -23,6 +24,14 @@ const createDiscussionService = async (userId, lectureId, question) => {
             const lecture = await lecture_model_1.default.findById(lectureId).session(session);
             if (!lecture)
                 throw (0, errorHandler_1.createError)('Lecture not found', 404);
+            // Check if user is enrolled in the course
+            const enrollment = await enrollment_model_1.default.findOne({
+                student: userId,
+                course: lecture.course
+            }).session(session);
+            if (!enrollment) {
+                throw (0, errorHandler_1.createError)('Must be enrolled in the course to create discussions', 403);
+            }
             const [discussion] = await discussion_model_1.default.create([{
                     user: userId,
                     lecture: lectureId,
@@ -68,6 +77,16 @@ const answerQuestionService = async (discussionId, userId, text, isInstructor = 
             const discussion = await discussion_model_1.default.findById(discussionId).session(session);
             if (!discussion)
                 throw (0, errorHandler_1.createError)('Discussion not found', 404);
+            // Check if user is enrolled in the course (unless they are instructor/admin)
+            if (!isInstructor) {
+                const enrollment = await enrollment_model_1.default.findOne({
+                    student: userId,
+                    course: discussion.course
+                }).session(session);
+                if (!enrollment) {
+                    throw (0, errorHandler_1.createError)('Must be enrolled in the course to answer discussions', 403);
+                }
+            }
             discussion.answers.push({
                 user: userId,
                 text,
@@ -108,15 +127,26 @@ exports.answerQuestionService = answerQuestionService;
 /**
  * Update discussion
  */
-const updateDiscussionService = async (discussionId, userId, question) => {
+const updateDiscussionService = async (discussionId, userId, question, userRole) => {
     try {
         const discussion = await (0, withTransaction_1.withTransaction)(async (session) => {
-            const discussion = await discussion_model_1.default.findOne({
-                _id: discussionId,
-                user: userId
-            }).session(session);
+            const discussion = await discussion_model_1.default.findById(discussionId).session(session);
             if (!discussion)
-                throw (0, errorHandler_1.createError)('Discussion not found or unauthorized', 404);
+                throw (0, errorHandler_1.createError)('Discussion not found', 404);
+            // Check permissions: original poster, course instructor, or admin
+            const isOriginalPoster = discussion.user.toString() === userId;
+            const isAdmin = userRole === 'admin';
+            let isCourseInstructor = false;
+            if (!isOriginalPoster && !isAdmin) {
+                // Check if user is the course instructor
+                const course = await course_model_1.default.findById(discussion.course).session(session);
+                if (course && course.instructor.toString() === userId) {
+                    isCourseInstructor = true;
+                }
+            }
+            if (!isOriginalPoster && !isAdmin && !isCourseInstructor) {
+                throw (0, errorHandler_1.createError)('Unauthorized: Only the original poster, course instructor, or admin can update discussions', 403);
+            }
             discussion.question = question;
             await discussion.save({ session });
             // Invalidate caches (matching the cache key patterns from routes)
@@ -144,15 +174,28 @@ exports.updateDiscussionService = updateDiscussionService;
 /**
  * Delete discussion
  */
-const deleteDiscussionService = async (discussionId, userId) => {
+const deleteDiscussionService = async (discussionId, userId, userRole) => {
     try {
         await (0, withTransaction_1.withTransaction)(async (session) => {
-            const discussion = await discussion_model_1.default.findOneAndDelete({
-                _id: discussionId,
-                user: userId
-            }, { session });
+            const discussion = await discussion_model_1.default.findById(discussionId).session(session);
             if (!discussion)
-                throw (0, errorHandler_1.createError)('Discussion not found or unauthorized', 404);
+                throw (0, errorHandler_1.createError)('Discussion not found', 404);
+            // Check permissions: original poster, course instructor, or admin
+            const isOriginalPoster = discussion.user.toString() === userId;
+            const isAdmin = userRole === 'admin';
+            let isCourseInstructor = false;
+            if (!isOriginalPoster && !isAdmin) {
+                // Check if user is the course instructor
+                const course = await course_model_1.default.findById(discussion.course).session(session);
+                if (course && course.instructor.toString() === userId) {
+                    isCourseInstructor = true;
+                }
+            }
+            if (!isOriginalPoster && !isAdmin && !isCourseInstructor) {
+                throw (0, errorHandler_1.createError)('Unauthorized: Only the original poster, course instructor, or admin can delete discussions', 403);
+            }
+            // Delete the discussion
+            await discussion_model_1.default.findByIdAndDelete(discussionId).session(session);
             // Invalidate caches (matching the cache key patterns from routes)
             await (0, cache_1.invalidateCache)(`${DISCUSSION_CACHE_BASE}:id=${discussionId}`);
             await (0, cache_1.invalidateCache)(`${DISCUSSION_CACHE_BASE}:lectureId:lectureId=${discussion.lecture}`);

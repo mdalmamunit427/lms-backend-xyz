@@ -18,8 +18,10 @@ import {
   getUserReviewsSchema,
   getCourseReviewStatsSchema,
 } from "./review.validation";
-import { getCacheStack, getDeleteStack, getMutationStack } from "../../utils/middlewareStacks";
-import { requireEnrollmentForCourseBody } from "../../middlewares/enrollment.middleware";
+import { isAuthenticated } from "../../middlewares/auth";
+import { rbac } from "../../middlewares/rbac.middleware";
+import { validate } from "../../middlewares/validate.middleware";
+import { cacheMiddleware } from "../../middlewares/cacheMiddleware";
 
 const router = Router();
 const REVIEW_CACHE_BASE = 'reviews';
@@ -29,22 +31,28 @@ const REVIEW_CACHE_BASE = 'reviews';
 // POST new review
 router.post(
   "/", 
-  ...getMutationStack('review:create', createReviewSchema), 
-  requireEnrollmentForCourseBody,
+  isAuthenticated,
+  rbac('review:create'),
+  validate(createReviewSchema), 
   createReviewHandler
 );
 
 // PATCH update review 
 router.patch(
   "/:id", 
-  ...getMutationStack('review:update', updateReviewSchema, reviewIdSchema), 
+  isAuthenticated,
+  rbac('review:update'),
+  validate(reviewIdSchema),
+  validate(updateReviewSchema), 
   updateReviewHandler
 );
 
 // DELETE review
 router.delete(
   "/:id", 
-  ...getDeleteStack('review:delete', reviewIdSchema),
+  isAuthenticated,
+  rbac('review:delete'),
+  validate(reviewIdSchema),
   deleteReviewHandler
 );
 
@@ -53,28 +61,35 @@ router.delete(
 // GET single review
 router.get(
     "/:id", 
-    ...getCacheStack(REVIEW_CACHE_BASE, { param: 'id' }, reviewIdSchema),
+    isAuthenticated,
+    cacheMiddleware(REVIEW_CACHE_BASE, { param: 'id' }),
+    validate(reviewIdSchema),
     getReviewHandler
 );
 
 // GET all reviews for a course
 router.get(
     "/course/:courseId", 
-    ...getCacheStack(`${REVIEW_CACHE_BASE}:courseId`, { param: 'courseId', isList: true }, getCourseReviewsSchema),
+    isAuthenticated,
+    cacheMiddleware(`${REVIEW_CACHE_BASE}:courseId`, { param: 'courseId', isList: true }),
+    validate(getCourseReviewsSchema),
     getCourseReviewsHandler
 );
 
 // GET course review statistics
 router.get(
     "/stats/course/:courseId", 
-    ...getCacheStack(`review-stats:courseId`, { param: 'courseId' }, getCourseReviewStatsSchema),
+    isAuthenticated,
+    cacheMiddleware(`review-stats:courseId`, { param: 'courseId' }),
+    validate(getCourseReviewStatsSchema),
     getCourseReviewStatsHandler
 );
 
 // GET user's reviews (authenticated user)
 router.get(
     "/user/me", 
-    ...getCacheStack(`${REVIEW_CACHE_BASE}:user`, { param: 'user', isList: true }, getUserReviewsSchema),
+    isAuthenticated,
+    validate(getUserReviewsSchema),
     getUserReviewsHandler
 );
 

@@ -12,11 +12,11 @@ export declare const answerQuestionService: (discussionId: string, userId: strin
 /**
  * Update discussion
  */
-export declare const updateDiscussionService: (discussionId: string, userId: string, question: string) => Promise<ServiceResponse<IDiscussion>>;
+export declare const updateDiscussionService: (discussionId: string, userId: string, question: string, userRole?: string) => Promise<ServiceResponse<IDiscussion>>;
 /**
  * Delete discussion
  */
-export declare const deleteDiscussionService: (discussionId: string, userId: string) => Promise<ServiceResponse<any>>;
+export declare const deleteDiscussionService: (discussionId: string, userId: string, userRole?: string) => Promise<ServiceResponse<any>>;
 /**
  * Get discussion by ID with caching
  */
@@ -62,8 +62,8 @@ export declare const getDiscussionById: (discussionId: string) => mongoose.Query
 }> & {
     __v: number;
 }, {}, IDiscussion, "findOne", {}>;
-export declare const updateDiscussion: (discussionId: string, userId: string, question: string) => Promise<ServiceResponse<IDiscussion>>;
-export declare const deleteDiscussion: (discussionId: string, userId: string) => Promise<ServiceResponse<any>>;
+export declare const updateDiscussion: (discussionId: string, userId: string, question: string, userRole?: string) => Promise<ServiceResponse<IDiscussion>>;
+export declare const deleteDiscussion: (discussionId: string, userId: string, userRole?: string) => Promise<ServiceResponse<any>>;
 export declare const getUserDiscussions: (userId: string) => mongoose.Query<(mongoose.Document<unknown, {}, IDiscussion, {}, {}> & IDiscussion & Required<{
     _id: unknown;
 }> & {
