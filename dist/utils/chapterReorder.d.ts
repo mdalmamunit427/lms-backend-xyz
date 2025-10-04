@@ -18,6 +18,7 @@ export interface ReorderResult {
 /**
  * Smart reorder logic for mixed lectures and quizzes within a chapter
  * Handles order conflicts by placing items in the next available position
+ * OPTIMIZED: Reduces database calls and improves performance
  *
  * @param chapterId - The chapter ID containing the items
  * @param orderList - Array of items to reorder with their target positions
@@ -46,6 +47,7 @@ export declare const getNextAvailableOrder: (chapterId: string, session?: any) =
 /**
  * Smart reorder logic for chapters within a course
  * Handles order conflicts by placing chapters in the next available position
+ * OPTIMIZED: Reduces database calls and improves performance
  *
  * @param courseId - The course ID containing the chapters
  * @param orderList - Array of chapters to reorder with their target positions

@@ -6,4 +6,6 @@ export declare function getCacheWithTTL<T = any>(key: string): Promise<{
 } | null>;
 export declare function getCache<T = any>(key: string): Promise<T | null>;
 export declare function invalidateCache(pattern: string): Promise<number>;
+export declare function invalidateCacheAsync(pattern: string): void;
+export declare function invalidateCacheBatch(patterns: string[]): Promise<number>;
 //# sourceMappingURL=cache.d.ts.map

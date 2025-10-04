@@ -5,6 +5,8 @@ exports.setCache = setCache;
 exports.getCacheWithTTL = getCacheWithTTL;
 exports.getCache = getCache;
 exports.invalidateCache = invalidateCache;
+exports.invalidateCacheAsync = invalidateCacheAsync;
+exports.invalidateCacheBatch = invalidateCacheBatch;
 // Refactored to support Stale-While-Revalidate
 const cacheConfig_1 = require("../config/cacheConfig");
 const redis_1 = require("../config/redis");
@@ -35,18 +37,55 @@ async function getCache(key) {
     const data = await redis_1.redis.get(namespaced);
     return data ? JSON.parse(data) : null;
 }
-// Invalidate cache (no change)
+// Invalidate cache with timeout and error handling
 async function invalidateCache(pattern) {
-    let cursor = "0";
-    let deletedCount = 0;
-    do {
-        const [nextCursor, keys] = await redis_1.redis.scan(cursor, "MATCH", (0, exports.namespacedKey)(`${pattern}*`), "COUNT", 100);
-        if (keys.length > 0) {
-            const result = await redis_1.redis.del(...keys);
-            deletedCount += result;
+    try {
+        let cursor = "0";
+        let deletedCount = 0;
+        const startTime = Date.now();
+        const timeout = 5000; // 5 second timeout for cache operations
+        do {
+            // Check timeout
+            if (Date.now() - startTime > timeout) {
+                console.warn(`Cache invalidation timeout for pattern: ${pattern}`);
+                break;
+            }
+            const [nextCursor, keys] = await Promise.race([
+                redis_1.redis.scan(cursor, "MATCH", (0, exports.namespacedKey)(`${pattern}*`), "COUNT", 100),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Cache scan timeout')), 2000))
+            ]);
+            if (keys.length > 0) {
+                const result = await Promise.race([
+                    redis_1.redis.del(...keys),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Cache delete timeout')), 2000))
+                ]);
+                deletedCount += result;
+            }
+            cursor = nextCursor;
+        } while (cursor !== "0");
+        return deletedCount;
+    }
+    catch (error) {
+        console.error(`Cache invalidation failed for pattern ${pattern}:`, error);
+        return 0; // Return 0 instead of throwing to prevent blocking main operations
+    }
+}
+// Non-blocking cache invalidation for background operations
+function invalidateCacheAsync(pattern) {
+    // Fire and forget - don't await this
+    invalidateCache(pattern).catch(error => {
+        console.error(`Async cache invalidation failed for pattern ${pattern}:`, error);
+    });
+}
+// Batch cache invalidation for multiple patterns
+async function invalidateCacheBatch(patterns) {
+    const promises = patterns.map(pattern => invalidateCache(pattern));
+    const results = await Promise.allSettled(promises);
+    return results.reduce((total, result) => {
+        if (result.status === 'fulfilled') {
+            return total + result.value;
         }
-        cursor = nextCursor;
-    } while (cursor !== "0");
-    return deletedCount;
+        return total;
+    }, 0);
 }
 //# sourceMappingURL=cache.js.map

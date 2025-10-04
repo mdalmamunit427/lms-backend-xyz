@@ -10,16 +10,23 @@ declare global {
 
 const connectWithOptions = async () => {
     const uri = process.env.MONGODB_URL!;
-    // Extend buffer timeout beyond default 10s to accommodate serverless cold starts
-    mongoose.set('bufferTimeoutMS', 30000);
+    // Optimize buffer timeout for production performance
+    mongoose.set('bufferTimeoutMS', 60000); // Increased to 60s for complex operations
+    
     // Add robust timeouts and IPv4 preference to avoid DNS/IPv6 issues in serverless
     return mongoose.connect(uri, {
-        serverSelectionTimeoutMS: 30000,
-        connectTimeoutMS: 30000,
-        socketTimeoutMS: 60000,
+        serverSelectionTimeoutMS: 45000, // Increased for better reliability
+        connectTimeoutMS: 45000,
+        socketTimeoutMS: 120000, // Increased for complex operations
         family: 4,
-        // Keep default buffering; alternatively, disable to fail fast:
-        // bufferCommands: false,
+        maxPoolSize: 10, // Increase connection pool size
+        minPoolSize: 2, // Maintain minimum connections
+        maxIdleTimeMS: 30000, // Close connections after 30s of inactivity
+        heartbeatFrequencyMS: 10000, // Check connection health every 10s
+        // Enable retryable writes for better reliability
+        retryWrites: true,
+        // Optimize for production workloads
+        bufferCommands: false, // Disable buffering for immediate error feedback
     });
 };
 

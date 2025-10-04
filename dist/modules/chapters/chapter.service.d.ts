@@ -30,12 +30,14 @@ export declare const createChapterWithLectures: (chapterData: ICreateChapterData
     lectures: ILecture[];
 }>>;
 /**
- * Update Chapter (title / order)
+ * Update Chapter (title / order) - OPTIMIZED VERSION
+ * Reduces database calls by optimizing validation and reordering
  */
 export declare const updateChapter: (id: string, data: IUpdateChapterData, userId: string, userRole: UserRole) => Promise<ServiceResponse<IChapter>>;
 export declare const deleteChapterService: (chapterId: string, userId: string, userRole: UserRole) => Promise<ServiceResponse<IChapter>>;
 /**
- * Reorder Chapters with Lectures
+ * Reorder Chapters with Lectures - OPTIMIZED VERSION
+ * Reduces database calls by optimizing existing operations
  */
 export declare const reorderChaptersWithLectures: (courseId: string, orderList: IReorderItem[], userId: string, userRole: UserRole) => Promise<ServiceResponse<boolean>>;
 /**

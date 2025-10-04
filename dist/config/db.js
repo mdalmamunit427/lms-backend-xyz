@@ -7,16 +7,22 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importDefault(require("mongoose"));
 const connectWithOptions = async () => {
     const uri = process.env.MONGODB_URL;
-    // Extend buffer timeout beyond default 10s to accommodate serverless cold starts
-    mongoose_1.default.set('bufferTimeoutMS', 30000);
+    // Optimize buffer timeout for production performance
+    mongoose_1.default.set('bufferTimeoutMS', 60000); // Increased to 60s for complex operations
     // Add robust timeouts and IPv4 preference to avoid DNS/IPv6 issues in serverless
     return mongoose_1.default.connect(uri, {
-        serverSelectionTimeoutMS: 30000,
-        connectTimeoutMS: 30000,
-        socketTimeoutMS: 60000,
+        serverSelectionTimeoutMS: 45000, // Increased for better reliability
+        connectTimeoutMS: 45000,
+        socketTimeoutMS: 120000, // Increased for complex operations
         family: 4,
-        // Keep default buffering; alternatively, disable to fail fast:
-        // bufferCommands: false,
+        maxPoolSize: 10, // Increase connection pool size
+        minPoolSize: 2, // Maintain minimum connections
+        maxIdleTimeMS: 30000, // Close connections after 30s of inactivity
+        heartbeatFrequencyMS: 10000, // Check connection health every 10s
+        // Enable retryable writes for better reliability
+        retryWrites: true,
+        // Optimize for production workloads
+        bufferCommands: false, // Disable buffering for immediate error feedback
     });
 };
 const connectDB = async () => {

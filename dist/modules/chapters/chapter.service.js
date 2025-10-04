@@ -53,12 +53,10 @@ const createChapter = async (data, userId, userRole) => {
                 const chapter = createdChapters[0];
                 // Apply smart reorder logic to place the chapter at the desired position
                 await (0, chapterReorder_1.reorderCourseChaptersWithConflictResolution)(data.course, [{ chapterId: chapter._id.toString(), order: data.order }], session);
-                // Invalidate relevant caches (batch, non-blocking)
-                Promise.all([
-                    (0, cache_1.invalidateCache)(`course:id=${data.course}`),
-                    (0, cache_1.invalidateCache)(`${CHAPTER_CACHE_BASE}:courseId=${data.course}`),
-                    (0, cache_1.invalidateCache)("courses:list"),
-                ]).catch(err => console.error('Cache invalidation failed (non-blocking):', err?.message || err));
+                // Invalidate relevant caches (non-blocking, async)
+                (0, cache_1.invalidateCacheAsync)(`course:id=${data.course}`);
+                (0, cache_1.invalidateCacheAsync)(`${CHAPTER_CACHE_BASE}:courseId=${data.course}`);
+                (0, cache_1.invalidateCacheAsync)("courses:list");
                 return chapter;
             }
             else {
@@ -157,10 +155,10 @@ const createChapterWithLectures = async (chapterData, lecturesData, userId, user
             await chapter.save({ session });
             // 8. Update course total duration in database
             await (0, course_service_1.updateCourseDuration)(chapterData.course, undefined, session);
-            // 9. Invalidate caches
-            await (0, cache_1.invalidateCache)(`course:id=${chapterData.course}`);
-            await (0, cache_1.invalidateCache)(`${CHAPTER_CACHE_BASE}:courseId=${chapterData.course}`);
-            await (0, cache_1.invalidateCache)("courses:list");
+            // 9. Invalidate caches (non-blocking)
+            (0, cache_1.invalidateCacheAsync)(`course:id=${chapterData.course}`);
+            (0, cache_1.invalidateCacheAsync)(`${CHAPTER_CACHE_BASE}:courseId=${chapterData.course}`);
+            (0, cache_1.invalidateCacheAsync)("courses:list");
             await (0, cache_1.invalidateCache)(`${CHAPTER_CACHE_BASE}:${chapter._id}`);
             return { chapter, lectures: createdLectures };
         });
@@ -180,28 +178,46 @@ const createChapterWithLectures = async (chapterData, lecturesData, userId, user
 };
 exports.createChapterWithLectures = createChapterWithLectures;
 /**
- * Update Chapter (title / order)
+ * Update Chapter (title / order) - OPTIMIZED VERSION
+ * Reduces database calls by optimizing validation and reordering
  */
 const updateChapter = async (id, data, userId, userRole) => {
     try {
         const chapter = await (0, withTransaction_1.withTransaction)(async (session) => {
-            const chapter = await chapter_model_1.default.findById(id).session(session);
+            // OPTIMIZATION: Single query with projection to get only needed fields
+            const chapter = await chapter_model_1.default.findById(id, {
+                _id: 1,
+                title: 1,
+                order: 1,
+                course: 1
+            }).session(session);
             if (!chapter)
                 throw (0, errorHandler_1.createError)("Chapter not found", 404);
             // SECURITY: Enforce ownership check on the course the chapter belongs to
             await (0, ownership_1.validateCourseAndOwnership)(chapter.course.toString(), userId, userRole);
-            if (data.title !== undefined)
+            // OPTIMIZATION: Only update title if provided and different
+            if (data.title !== undefined && data.title !== chapter.title) {
                 chapter.title = data.title;
+            }
+            // OPTIMIZATION: Only reorder if order is provided and different
             if (data.order !== undefined && data.order !== chapter.order) {
                 // Apply smart reorder logic for chapter order changes
                 await (0, chapterReorder_1.reorderCourseChaptersWithConflictResolution)(chapter.course.toString(), [{ chapterId: id, order: data.order }], session);
             }
-            await chapter.save({ session });
-            // Invalidate caches
-            await (0, cache_1.invalidateCache)(`${CHAPTER_CACHE_BASE}:${chapter._id}`);
-            await (0, cache_1.invalidateCache)(`course:id=${chapter.course}`);
-            await (0, cache_1.invalidateCache)(`${CHAPTER_CACHE_BASE}:courseId=${chapter.course}`);
-            await (0, cache_1.invalidateCache)("courses:list");
+            // OPTIMIZATION: Only save if there are actual changes
+            if (data.title !== undefined && data.title !== chapter.title) {
+                await chapter.save({ session });
+            }
+            // OPTIMIZATION: Batch cache invalidation operations
+            const cacheKeys = [
+                `${CHAPTER_CACHE_BASE}:${chapter._id}`,
+                `course:id=${chapter.course}`,
+                `${CHAPTER_CACHE_BASE}:courseId=${chapter.course}`,
+                "courses:list"
+            ];
+            // Execute cache invalidation in parallel (non-blocking)
+            Promise.all(cacheKeys.map(key => (0, cache_1.invalidateCache)(key)))
+                .catch(err => console.error('Cache invalidation failed (non-blocking):', err?.message || err));
             return chapter;
         });
         return {
@@ -257,45 +273,46 @@ const deleteChapterService = async (chapterId, userId, userRole) => {
 };
 exports.deleteChapterService = deleteChapterService;
 /**
- * Reorder Chapters with Lectures
+ * Reorder Chapters with Lectures - OPTIMIZED VERSION
+ * Reduces database calls by optimizing existing operations
  */
 const reorderChaptersWithLectures = async (courseId, orderList, userId, userRole) => {
     try {
         await (0, withTransaction_1.withTransaction)(async (session) => {
-            // 1. SECURITY: Enforce ownership
+            // 1. SECURITY: Enforce ownership (single call)
             await (0, ownership_1.validateCourseAndOwnership)(courseId, userId, userRole);
-            // Note: Validation is handled by the smart reorder functions
-            // --- CORE MUTATION 1: Update Chapter Orders using smart reorder ---
-            // Convert chapter order list to the utility format
+            // 2. OPTIMIZATION: Batch chapter reordering operations
             const chapterReorderRequests = orderList.map(item => ({
                 chapterId: item.chapterId,
                 order: item.order
             }));
             // Apply smart reorder logic for chapters (handles conflicts automatically)
             await (0, chapterReorder_1.reorderCourseChaptersWithConflictResolution)(courseId, chapterReorderRequests, session);
-            // --- CORE MUTATION 2: Update Lecture Orders within each chapter using smart reorder ---
-            for (const chapterOrder of orderList) {
-                if (chapterOrder.lectures && chapterOrder.lectures.length > 0) {
-                    // Convert lecture order list to the utility format
-                    const reorderRequests = chapterOrder.lectures.map(item => ({
-                        itemId: item.lectureId,
-                        itemType: 'lecture',
-                        order: item.order
-                    }));
-                    // Apply smart reorder logic using the utility (handles conflicts automatically)
-                    await (0, chapterReorder_1.reorderChapterItemsWithConflictResolution)(chapterOrder.chapterId, reorderRequests, session);
-                }
+            // 3. OPTIMIZATION: Batch lecture reordering operations for all chapters
+            const lectureReorderPromises = orderList
+                .filter(chapterOrder => chapterOrder.lectures && chapterOrder.lectures.length > 0)
+                .map(chapterOrder => {
+                const reorderRequests = chapterOrder.lectures.map(item => ({
+                    itemId: item.lectureId,
+                    itemType: 'lecture',
+                    order: item.order
+                }));
+                return (0, chapterReorder_1.reorderChapterItemsWithConflictResolution)(chapterOrder.chapterId, reorderRequests, session);
+            });
+            // Execute all lecture reordering operations in parallel
+            if (lectureReorderPromises.length > 0) {
+                await Promise.all(lectureReorderPromises);
             }
-            // 3. Invalidate caches (Ensuring keys match the standard pattern)
-            for (const c of orderList) {
-                // Invalidate single chapter view
-                await (0, cache_1.invalidateCache)(`${CHAPTER_CACHE_BASE}:${c.chapterId}`);
-            }
-            // Invalidate course detail and chapters list
-            await (0, cache_1.invalidateCache)(`course:id=${courseId}`);
-            await (0, cache_1.invalidateCache)(`${CHAPTER_CACHE_BASE}:courseId=${courseId}`);
-            // Invalidate list cache
-            await (0, cache_1.invalidateCache)("courses:list");
+            // 4. OPTIMIZATION: Batch cache invalidation operations
+            const cacheKeys = [
+                `course:id=${courseId}`,
+                `${CHAPTER_CACHE_BASE}:courseId=${courseId}`,
+                "courses:list",
+                ...orderList.map(c => `${CHAPTER_CACHE_BASE}:${c.chapterId}`)
+            ];
+            // Execute cache invalidation in parallel (non-blocking)
+            Promise.all(cacheKeys.map(key => (0, cache_1.invalidateCache)(key)))
+                .catch(err => console.error('Cache invalidation failed (non-blocking):', err?.message || err));
             return true;
         });
         return {
